@@ -674,14 +674,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
       });
     }
 
-    DashboardRepository()
-        .fetchAccountOnlineDelivery(
-          widget.manufacturerPhone,
-          isManufacturer: true,
-        )
-        .then((enabled) {
-      if (mounted) setState(() => _accountDeliveryEnabled = enabled);
-    });
+    _refreshAccountDelivery();
 
     if (p?.variants != null) {
       _variants.addAll(p!.variants!);
@@ -694,6 +687,14 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
         text: i < existingImages.length ? existingImages[i] : '',
       ),
     );
+  }
+
+  Future<void> _refreshAccountDelivery() async {
+    final enabled = await DashboardRepository().fetchAccountOnlineDelivery(
+      widget.manufacturerPhone,
+      isManufacturer: true,
+    );
+    if (mounted) setState(() => _accountDeliveryEnabled = enabled);
   }
 
   @override
@@ -1376,7 +1377,7 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
                   ),
                 ),
                 ] else if (_accountDeliveryEnabled == false)
-                  const OnlineDeliveryPrompt(),
+                  OnlineDeliveryPrompt(onReturned: _refreshAccountDelivery),
                 const SizedBox(height: 16),
 
                 const SizedBox(height: 80),

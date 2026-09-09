@@ -805,16 +805,17 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
         });
       }
     });
+    _refreshAccountDelivery();
+  }
+
+  Future<void> _refreshAccountDelivery() async {
     final isManufacturer =
         ref.read(currentUserProvider).value?.isManufacturer ?? false;
-    DashboardRepository()
-        .fetchAccountOnlineDelivery(
-          widget.sellerPhone,
-          isManufacturer: isManufacturer,
-        )
-        .then((enabled) {
-      if (mounted) setState(() => _accountDeliveryEnabled = enabled);
-    });
+    final enabled = await DashboardRepository().fetchAccountOnlineDelivery(
+      widget.sellerPhone,
+      isManufacturer: isManufacturer,
+    );
+    if (mounted) setState(() => _accountDeliveryEnabled = enabled);
   }
 
   @override
@@ -1507,7 +1508,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                     ),
                   ),
                 ] else if (_accountDeliveryEnabled == false)
-                  const OnlineDeliveryPrompt(),
+                  OnlineDeliveryPrompt(onReturned: _refreshAccountDelivery),
 
                 const SizedBox(height: 80),
               ],
@@ -1820,14 +1821,15 @@ class _EditListingSheetState extends State<_EditListingSheet> {
     _discountActive = widget.listing.discount?.isActive ?? false;
     _discountPct = widget.listing.discount?.percentage ?? 10;
 
-    DashboardRepository()
-        .fetchAccountOnlineDelivery(
-          widget.listing.sellerPhone,
-          isManufacturer: widget.listing.sellerType == 'manufacturer',
-        )
-        .then((enabled) {
-      if (mounted) setState(() => _accountDeliveryEnabled = enabled);
-    });
+    _refreshAccountDelivery();
+  }
+
+  Future<void> _refreshAccountDelivery() async {
+    final enabled = await DashboardRepository().fetchAccountOnlineDelivery(
+      widget.listing.sellerPhone,
+      isManufacturer: widget.listing.sellerType == 'manufacturer',
+    );
+    if (mounted) setState(() => _accountDeliveryEnabled = enabled);
   }
 
   @override
@@ -2001,7 +2003,7 @@ class _EditListingSheetState extends State<_EditListingSheet> {
                 ),
               ),
             ] else if (_accountDeliveryEnabled == false)
-              const OnlineDeliveryPrompt(),
+              OnlineDeliveryPrompt(onReturned: _refreshAccountDelivery),
             const SizedBox(height: 16),
 
             // Base price & stock

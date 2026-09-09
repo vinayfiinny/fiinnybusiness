@@ -16,7 +16,14 @@ import '../constants/app_text_styles.dart';
 /// same gate, and duplicating it was how the two silently drifted apart in
 /// the first place.
 class OnlineDeliveryPrompt extends StatelessWidget {
-  const OnlineDeliveryPrompt({super.key});
+  /// Called after the seller returns from Settings (whether or not they
+  /// actually turned delivery on) so the form can re-check the account flag.
+  /// Without this, a seller who enables delivery + GST and comes straight
+  /// back would still see this same "offline-only" prompt — the fetch that
+  /// decided to show it only ever runs once, when the form first opens.
+  final VoidCallback? onReturned;
+
+  const OnlineDeliveryPrompt({super.key, this.onReturned});
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +60,13 @@ class OnlineDeliveryPrompt extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: () => context.push('/profile/settings'),
+            onPressed: () async {
+              // Settings is pushed on the root navigator, on top of this
+              // form's own modal sheet — the sheet is never popped, just
+              // covered, so its fields are still there when this returns.
+              await context.push('/profile/settings');
+              onReturned?.call();
+            },
             icon: const Icon(Icons.settings_outlined, size: 16),
             label: const Text('Go to Settings'),
           ),
