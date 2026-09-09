@@ -18,6 +18,7 @@ import '../../../core/utils/currency_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/online_delivery_prompt.dart';
+import '../../dashboard/widgets/product_form_sections.dart';
 import '../../dashboard/data/dashboard_repository.dart';
 import '../../marketplace/data/catalog_repository.dart';
 import '../data/manufacturer_repository.dart';
@@ -601,6 +602,15 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
   // true — mirrors web's accountDeliveryEnabled gate exactly.
   bool? _accountDeliveryEnabled;
 
+  // Web-parity product detail fields (see product_form_sections.dart) —
+  // this form had none of these; a manufacturer's catalog product always
+  // lacked the structured detail (category-specific fields, composition,
+  // custom fields, video) a web-created one had.
+  final Map<String, dynamic> _categoryInfo = {};
+  List<Map<String, String>> _composition = [];
+  List<Map<String, String>> _customFields = [];
+  String _videoUrl = '';
+
   // Catalog autofill
   final _catalogRepo = CatalogRepository();
   List<CatalogModel> _catalogOptions = [];
@@ -647,6 +657,15 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
     // — the same as web's edit modal — so a legacy listing doesn't silently
     // go offline just because the field was never written.
     _sellMode = p == null ? 'offline_store_only' : (p.sellMode ?? 'online_delivery');
+    if (p?.categoryInfo != null) _categoryInfo.addAll(p!.categoryInfo!);
+    _composition = p?.composition
+            ?.map((c) => {'name': c.name, 'value': c.value})
+            .toList() ??
+        [];
+    _customFields = p?.customFields != null
+        ? List<Map<String, String>>.from(p!.customFields!)
+        : [];
+    _videoUrl = p?.videoUrl ?? '';
 
     // Load all products for name autofill (only when adding new)
     if (p == null) {
@@ -1035,6 +1054,60 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
                 ),
                 const SizedBox(height: 20),
 
+                // ── Web-parity sections ─────────────────────────────────
+                // Order matches web's Add Product form: Category Info →
+                // Composition → Additional Information, between Description
+                // and Pack Sizes. This form had none of these before — a
+                // manufacturer's catalog product always lacked the
+                // structured detail a web-created one had, and had no way
+                // to add a product video at all.
+                Builder(
+                  builder: (context) {
+                    final schema = ref.watch(productSchemaProvider).value ??
+                        ProductSchemaRepository.fallback;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CategoryInfoSection(
+                          schema: schema,
+                          category: _category,
+                          values: _categoryInfo,
+                          onChanged: (key, value) {
+                            // No setState: the editors hold their own text
+                            // state, and rebuilding here would fight the
+                            // cursor position while typing.
+                            _categoryInfo[key] = value;
+                          },
+                        ),
+                        if (schema.showsComposition(_category))
+                          KeyValueRowsSection(
+                            title: 'Composition',
+                            subtitle:
+                                'Ingredients & nutrients shown on the product page',
+                            keyName: 'name',
+                            valueName: 'value',
+                            keyLabel: 'Component / Ingredient',
+                            valueLabel: 'Value / %',
+                            addLabel: 'Add component',
+                            rows: _composition,
+                            onChanged: (rows) => _composition = rows,
+                          ),
+                        KeyValueRowsSection(
+                          title: 'Additional Information',
+                          subtitle: 'Any other detail buyers should see',
+                          keyName: 'title',
+                          valueName: 'value',
+                          keyLabel: 'Title',
+                          valueLabel: 'Value',
+                          addLabel: 'Add information',
+                          rows: _customFields,
+                          onChanged: (rows) => _customFields = rows,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+
                 // Variants list
                 Text(
                   'Pack Sizes & MRPs',
@@ -1191,6 +1264,11 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
                 const SizedBox(height: 12),
                 ...List.generate(5, (i) => _buildImageRow(i)),
                 const SizedBox(height: 16),
+
+                ProductVideoSection(
+                  initialValue: _videoUrl,
+                  onChanged: (v) => _videoUrl = v,
+                ),
 
                 // ── GST & Sell Mode ──────────────────────────────────────
                 // Matches web exactly: hidden until Online Delivery is on
@@ -1465,6 +1543,17 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
         'sellMode': effectiveSellMode,
         'gstApplicable': effectiveGstApplicable,
         'gstRate': effectiveGstApplicable ? _gstRate : 0.0,
+        // Drop empty values so a product never carries a blank map/array.
+        'categoryInfo': Map<String, dynamic>.fromEntries(
+          _categoryInfo.entries.where((e) {
+            final v = e.value;
+            if (v is List) return v.isNotEmpty;
+            return v != null && v.toString().trim().isNotEmpty;
+          }),
+        ),
+        'composition': _composition,
+        'customFields': _customFields,
+        'videoUrl': _videoUrl,
       };
 
       if (widget.product != null) {
@@ -1489,6 +1578,16 @@ class _ProductSheetState extends ConsumerState<_ProductSheet> {
           sellMode: effectiveSellMode,
           gstApplicable: effectiveGstApplicable,
           gstRate: effectiveGstApplicable ? _gstRate : 0.0,
+          categoryInfo: Map<String, dynamic>.fromEntries(
+            _categoryInfo.entries.where((e) {
+              final v = e.value;
+              if (v is List) return v.isNotEmpty;
+              return v != null && v.toString().trim().isNotEmpty;
+            }),
+          ),
+          composition: _composition,
+          customFields: _customFields,
+          videoUrl: _videoUrl,
         );
       }
       if (mounted) Navigator.pop(context);

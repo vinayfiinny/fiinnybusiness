@@ -1191,10 +1191,6 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                           rows: _customFields,
                           onChanged: (rows) => _customFields = rows,
                         ),
-                        ProductVideoSection(
-                          initialValue: _videoUrl,
-                          onChanged: (v) => _videoUrl = v,
-                        ),
                       ],
                     );
                   },
@@ -1379,6 +1375,13 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
 
                 ...List.generate(5, (i) => _buildImageRow(i)),
                 const SizedBox(height: 16),
+
+                // Matches web's field order: video comes right after images,
+                // before GST & Delivery. Used to sit above Pack Sizes instead.
+                ProductVideoSection(
+                  initialValue: _videoUrl,
+                  onChanged: (v) => _videoUrl = v,
+                ),
 
                 // Store Address
                 Text(
