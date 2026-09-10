@@ -17,6 +17,7 @@ import '../../../core/models/listing_model.dart';
 import '../../../core/models/reel_model.dart';
 import '../../../core/models/review_model.dart';
 import '../../../core/models/store_model.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/cart_provider.dart';
 import '../../../core/models/cart_model.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -424,6 +425,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     required bool buyNow,
   }) async {
     if (options.isEmpty) return;
+    if (!ensureSignedInForCart(context, ref)) return;
 
     // Auto-select the best store instead of interrupting with a picker.
     // buildStoreOptions has already dropped any store that cannot supply the
@@ -2955,6 +2957,7 @@ class _SellerTileState extends ConsumerState<_SellerTile> {
   }
 
   void _addToCart(BuildContext context) {
+    if (!ensureSignedInForCart(context, ref)) return;
     final listing = widget.listing;
     ref
         .read(cartProvider.notifier)
@@ -2993,6 +2996,7 @@ class _SellerTileState extends ConsumerState<_SellerTile> {
   /// Buy Now from this specific store: add to cart, then go straight to
   /// checkout (login is enforced by the /checkout route guard).
   void _buyNow(BuildContext context) {
+    if (!ensureSignedInForCart(context, ref)) return;
     final listing = widget.listing;
     ref
         .read(cartProvider.notifier)
@@ -3017,6 +3021,38 @@ class _SellerTileState extends ConsumerState<_SellerTile> {
         );
     context.push('/checkout');
   }
+}
+
+/// Guests can browse the whole catalogue, but ordering needs an account.
+/// Returns true if the user is signed in; otherwise shows a prompt and
+/// returns false. Shared by the sticky Add to Cart / Buy Now bar and the
+/// per-store tiles so every cart entry point is gated in one place.
+bool ensureSignedInForCart(BuildContext context, WidgetRef ref) {
+  if (ref.read(authStateProvider).value != null) return true;
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Sign in to continue'),
+      content: const Text(
+        'Create an account or sign in to add items to your cart and place '
+        'orders. You can keep browsing without one.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Not now'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            context.push('/login');
+          },
+          child: const Text('Sign in'),
+        ),
+      ],
+    ),
+  );
+  return false;
 }
 
 Widget detailRow(IconData icon, String text) => Padding(
