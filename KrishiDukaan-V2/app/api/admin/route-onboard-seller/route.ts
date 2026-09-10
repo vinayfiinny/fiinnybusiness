@@ -130,24 +130,30 @@ export async function POST(req: NextRequest) {
     let activationStatus = seller.routeStatus ?? "requested";
 
     if (!accountId) {
+      const digits = seller.phone.replace(/\D/g, "");
+      const city = String(seller.data.city ?? "").trim();
+      // Razorpay rejects both an empty street2 ("The street2 field is
+      // required.") and a "+" anywhere in reference_id ("The code format is
+      // invalid."), so street2 falls back to the city (never blank) and the
+      // reference id is digits only with a prefix.
       const account = await razorpayClient.accounts.create({
         email,
-        phone: seller.phone.replace(/^\+/, ""),
+        phone: `+${digits}`,
         type: "route",
         legal_business_name: legalName,
         customer_facing_business_name: legalName,
         business_type: "proprietorship",
-        reference_id: seller.phone,
+        reference_id: `seller-${digits}`,
         profile: {
           category: "ecommerce",
           subcategory: "agriculture",
           addresses: {
             registered: {
               street1: String(seller.data.address ?? seller.data.street ?? "NA"),
-              street2: String(seller.data.area ?? ""),
-              city: String(seller.data.city ?? ""),
-              state: String(seller.data.state ?? ""),
-              postal_code: String(seller.data.pincode ?? ""),
+              street2: String(seller.data.area ?? "").trim() || city || "NA",
+              city,
+              state: String(seller.data.state ?? "").trim(),
+              postal_code: String(seller.data.pincode ?? "").trim(),
               country: "IN",
             },
           },
