@@ -1211,6 +1211,17 @@ class DashboardRepository {
     return await task.ref.getDownloadURL();
   }
 
+  /// Uploads a seller's shop banner and returns its public download URL. Same
+  /// `profile-images/**` storage.rules prefix as the logo — web's dashboard
+  /// banner uploader (handleBannerFile) writes to `profile-images/banners`.
+  Future<String> uploadProfileBanner(File imageFile, String phone) async {
+    final ref = _storage.ref().child(
+      'profile-images/banners/${DateTime.now().millisecondsSinceEpoch}-$phone.jpg',
+    );
+    final task = await ref.putFile(imageFile);
+    return await task.ref.getDownloadURL();
+  }
+
   // ── Seat stats ────────────────────────────────────────────────────────────
 
   /// Computes real seat stats from `subscriptions` + `retailerSeatListings`,

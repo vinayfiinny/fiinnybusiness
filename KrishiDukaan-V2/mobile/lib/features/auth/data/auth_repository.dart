@@ -125,6 +125,12 @@ class AuthRepository {
     String? gstin,
     String? googleMapsUrl,
     String? logoUrl,
+    String? secondaryPhone,
+    String? website,
+    String? bannerUrl,
+    /// {instagram, facebook, whatsapp, youtube} — same shape web writes as
+    /// `socialLinks`. Pass null to leave the existing map untouched.
+    Map<String, String>? socialLinks,
   }) async {
     final isSeller = role == 'retailer' || role == 'manufacturer';
 
@@ -166,6 +172,12 @@ class AuthRepository {
         // Buyer-facing "open in Google Maps" prefers this over coordinates.
         'googleMapsUrl': ?googleMapsUrl,
         if (logoUrl != null && logoUrl.isNotEmpty) 'logo': logoUrl,
+        // Same keys the web dashboard writes (profile-persistence.ts):
+        // `banner`/`website`/`secondaryPhone` flat, socials under `socialLinks`.
+        'secondaryPhone': ?secondaryPhone,
+        'website': ?website,
+        if (bannerUrl != null && bannerUrl.isNotEmpty) 'banner': bannerUrl,
+        'socialLinks': ?socialLinks,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -187,6 +199,10 @@ class AuthRepository {
         'state': ?state,
         'gstin': ?gstin,
         if (logoUrl != null && logoUrl.isNotEmpty) 'logo': logoUrl,
+        'secondaryPhone': ?secondaryPhone,
+        'website': ?website,
+        if (bannerUrl != null && bannerUrl.isNotEmpty) 'banner': bannerUrl,
+        'socialLinks': ?socialLinks,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
