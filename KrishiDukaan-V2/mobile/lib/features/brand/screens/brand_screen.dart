@@ -98,6 +98,16 @@ class BrandScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final brandAsync = ref.watch(_brandProvider(manufacturerPhone));
 
+    // These three don't depend on the brand doc's content, only on the
+    // phone we already have — but the tab widgets that watch them aren't
+    // built until brandAsync has data, so without this they were queued
+    // behind the brand fetch instead of running alongside it. Pre-warming
+    // them here means products/dealers/reviews are already in flight (or
+    // done) by the time their tabs actually mount.
+    ref.watch(_brandProductsProvider(manufacturerPhone));
+    ref.watch(_brandRetailersProvider(manufacturerPhone));
+    ref.watch(storeReviewsProvider(manufacturerPhone));
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: brandAsync.when(

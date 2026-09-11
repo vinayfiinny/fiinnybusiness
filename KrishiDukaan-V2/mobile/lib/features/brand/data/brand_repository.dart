@@ -26,9 +26,19 @@ class BrandRepository {
   }
 
   Future<BrandModel?> fetchBrandByPhone(String phone) async {
-    final mfrDoc = await _db.collection('manufacturers').doc(phone).get();
+    // manufacturers/{phone} and brandPages/{phone} share the same doc ID
+    // here (unlike the slug/uid lookups below, which must find the
+    // manufacturer doc first to learn its ID) — fetching both in parallel
+    // instead of sequentially cuts a full round trip off every brand page
+    // open.
+    final results = await Future.wait([
+      _db.collection('manufacturers').doc(phone).get(),
+      _db.collection('brandPages').doc(phone).get(),
+    ]);
+    final mfrDoc = results[0];
     if (!mfrDoc.exists) return null;
-    return _buildBrand(mfrDoc);
+    final brandDoc = results[1];
+    return BrandModel.fromFirestore(mfrDoc, brandDoc.exists ? brandDoc : null);
   }
 
   Future<BrandModel> _buildBrand(DocumentSnapshot<Map<String, dynamic>> mfrDoc) async {
