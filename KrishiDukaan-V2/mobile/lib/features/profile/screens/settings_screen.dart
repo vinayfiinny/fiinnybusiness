@@ -7,6 +7,7 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../core/providers/locale_provider.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../dashboard/data/dashboard_repository.dart';
+import '../widgets/online_delivery_terms_dialog.dart';
 
 /// Validates the Indian 15-character GSTIN format — identical regex to web's
 /// isValidGstinFormat (app/dashboard/_lib/profile-persistence.ts), so a
@@ -127,9 +128,13 @@ class _OnlineDeliveryToggleState extends ConsumerState<_OnlineDeliveryToggle> {
     if (mounted) setState(() => _enabled = value);
   }
 
-  /// Turning ON requires a valid GST number — matches the same gate the web
-  /// dashboard and admin panel already enforce (form.gstin check before
-  /// enabling). Turning off is never gated; only going live needs it.
+  /// Turning ON always routes through the GST-confirm sheet, pre-filled with
+  /// the existing GST if there is one — matching web (app/dashboard/profile/
+  /// page.tsx: checking the box ALWAYS enters "pending-enable" mode,
+  /// regardless of whether form.gstin is already valid, it only pre-fills
+  /// the input). Saving that step always opens the Consent Form terms
+  /// dialog; only agreeing there actually flips the account flag. Turning
+  /// off is never gated.
   Future<void> _onChanged(bool value) async {
     if (!value) {
       await _set(false);
@@ -139,7 +144,7 @@ class _OnlineDeliveryToggleState extends ConsumerState<_OnlineDeliveryToggle> {
     var gstin = (widget.gstin ?? '').trim();
     if (!_isValidGstin(gstin)) {
       // The users/{phone} mirror can lag behind the role doc — check there
-      // before assuming it's really missing (same fallback profile_edit_
+      // so the sheet still pre-fills correctly (same fallback profile_edit_
       // screen.dart already relies on).
       try {
         final col = widget.isManufacturer ? 'manufacturers' : 'retailers';
@@ -153,11 +158,6 @@ class _OnlineDeliveryToggleState extends ConsumerState<_OnlineDeliveryToggle> {
       }
     }
 
-    if (_isValidGstin(gstin)) {
-      await _set(true);
-      return;
-    }
-
     if (!mounted) return;
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -167,10 +167,14 @@ class _OnlineDeliveryToggleState extends ConsumerState<_OnlineDeliveryToggle> {
         sellerPhone: widget.sellerPhone,
         isManufacturer: widget.isManufacturer,
         isHindi: widget.isHindi,
+        initialGstin: gstin,
       ),
     );
     if (saved == true) {
-      await _set(true);
+      // The sheet itself already wrote gstin + onlineDelivery via
+      // enableOnlineDeliveryWithGst after the terms dialog was agreed to —
+      // just refresh local UI state to reflect it, no second write.
+      if (mounted) setState(() => _enabled = true);
     }
   }
 
@@ -323,11 +327,13 @@ class _GstRequiredSheet extends StatefulWidget {
   final String sellerPhone;
   final bool isManufacturer;
   final bool isHindi;
+  final String initialGstin;
 
   const _GstRequiredSheet({
     required this.sellerPhone,
     required this.isManufacturer,
     required this.isHindi,
+    this.initialGstin = '',
   });
 
   @override
@@ -335,7 +341,7 @@ class _GstRequiredSheet extends StatefulWidget {
 }
 
 class _GstRequiredSheetState extends State<_GstRequiredSheet> {
-  final _ctrl = TextEditingController();
+  late final _ctrl = TextEditingController(text: widget.initialGstin);
   final _repo = DashboardRepository();
   bool _saving = false;
   String? _error;
@@ -361,15 +367,24 @@ class _GstRequiredSheetState extends State<_GstRequiredSheet> {
       return;
     }
 
+    // Matches web's handleSaveGstAndEnable: the Consent Form always opens
+    // here, on every save, before anything is written.
+    final acceptance = await OnlineDeliveryTermsDialog.show(
+      context,
+      isHindi: widget.isHindi,
+    );
+    if (acceptance == null) return;
+
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      await _repo.updateGstin(
+      await _repo.enableOnlineDeliveryWithGst(
         widget.sellerPhone,
         isManufacturer: widget.isManufacturer,
         gstin: gstin,
+        termsAcceptance: acceptance,
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

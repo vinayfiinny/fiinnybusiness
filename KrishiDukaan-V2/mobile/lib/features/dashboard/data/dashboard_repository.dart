@@ -1036,6 +1036,43 @@ class DashboardRepository {
     }
   }
 
+  /// Mirrors web's enableOnlineDeliveryWithGst (profile-persistence.ts): the
+  /// single combined write that happens only after the seller has confirmed
+  /// their GST number AND agreed to the Online Delivery Terms dialog. Writes
+  /// gstin + gstRegistered + onlineDelivery:true + the terms-acceptance
+  /// receipt across the same three collections as the other mirrors above.
+  Future<void> enableOnlineDeliveryWithGst(
+    String sellerPhone, {
+    required bool isManufacturer,
+    required String gstin,
+    required Map<String, dynamic> termsAcceptance,
+  }) async {
+    if (sellerPhone.isEmpty) return;
+
+    final payload = {
+      'gstin': gstin,
+      'gstRegistered': true,
+      'onlineDelivery': true,
+      'onlineDeliveryTerms': termsAcceptance,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    await _db
+        .collection('users')
+        .doc(sellerPhone)
+        .set(payload, SetOptions(merge: true));
+
+    final profileCollection = isManufacturer ? 'manufacturers' : 'retailers';
+    for (final path in [profileCollection, 'profiles']) {
+      try {
+        await _db.collection(path).doc(sellerPhone).update(payload);
+      } catch (_) {
+        // Mirror doesn't exist yet, or isn't writable — users/{phone} above
+        // is already the source of truth the enable-gate itself checks.
+      }
+    }
+  }
+
   /// Reads the seller's account-level online-delivery flag using web's exact
   /// precedence (profiles -> users -> retailers|manufacturers), so the toggle
   /// shows the same state the web dashboard would.
