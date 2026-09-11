@@ -58,9 +58,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   int _activeImageIdx = 0;
 
   // Sellers are nearest-first; only the closest few are shown until the
-  // shopper taps "Show all". Keeps long seller lists from dominating the page.
-  static const _kStorePreviewLimit = 5;
-  bool _showAllStores = false;
+  // shopper taps "See more" — each tap reveals another batch rather than
+  // building every remaining tile at once. Each _SellerTile fires its own
+  // bulk-discount queries in initState, so a product with 300 sellers used
+  // to fire ~300 x 2-3 Firestore queries the instant "Show all" was tapped;
+  // paging by _kStorePageSize keeps that bounded no matter how many sellers
+  // a product has.
+  static const _kStorePreviewLimit = 10;
+  static const _kStorePageSize = 10;
+  int _visibleStoreCount = _kStorePreviewLimit;
 
   @override
   void initState() {
@@ -1233,10 +1239,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               }
               final sellerDiscounts = catalog.sellerDiscounts;
               final total = listings.length;
-              final hasMore = total > _kStorePreviewLimit;
-              final visible = (hasMore && !_showAllStores)
-                  ? listings.take(_kStorePreviewLimit).toList()
-                  : listings;
+              final shownCount =
+                  _visibleStoreCount < total ? _visibleStoreCount : total;
+              final hasMore = shownCount < total;
+              final visible = listings.take(shownCount).toList();
               return Column(
                 children: [
                   ...visible.map(
@@ -1258,7 +1264,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           0.0,
                     ),
                   ),
-                  if (hasMore) _buildStoresToggle(total),
+                  if (hasMore) _buildStoresToggle(total, shownCount),
                 ],
               );
             },
@@ -1268,25 +1274,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  /// "Show all N stores" / "Show less" toggle shown when more sellers exist
-  /// than the preview limit.
-  Widget _buildStoresToggle(int total) {
-    final hidden = total - _kStorePreviewLimit;
+  /// "See more" toggle shown when more sellers exist than are currently
+  /// rendered — reveals the next batch of _kStorePageSize sellers per tap
+  /// rather than every remaining one at once (see _visibleStoreCount comment).
+  Widget _buildStoresToggle(int total, int shownCount) {
+    final hidden = total - shownCount;
+    final nextBatch = hidden < _kStorePageSize ? hidden : _kStorePageSize;
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: SizedBox(
         width: double.infinity,
         child: OutlinedButton.icon(
-          onPressed: () => setState(() => _showAllStores = !_showAllStores),
-          icon: Icon(
-            _showAllStores ? Icons.expand_less : Icons.expand_more,
-            size: 18,
+          onPressed: () => setState(
+            () => _visibleStoreCount += _kStorePageSize,
           ),
-          label: Text(
-            _showAllStores
-                ? 'Show less'
-                : 'Show all $total stores (+$hidden more)',
-          ),
+          icon: const Icon(Icons.expand_more, size: 18),
+          label: Text('See more ($nextBatch of $hidden remaining)'),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.primary,
             side: const BorderSide(color: AppColors.primary),
