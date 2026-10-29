@@ -36,7 +36,10 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
+  // First name and surname are both compulsory; joined as [_fullName] for
+  // the order, Razorpay and messages (same `customerName` as before).
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
@@ -87,7 +90,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   void dispose() {
     _razorpay.clear();
-    _nameCtrl.dispose();
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
     _cityCtrl.dispose();
@@ -118,9 +122,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (f.state.isNotEmpty) _setState(f.state);
   }
 
+  String get _fullName => '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'.trim();
+
+  /// "Ramesh Kumar Patil" → first "Ramesh Kumar", surname "Patil".
+  void _prefillName(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return;
+    if (parts.length == 1) {
+      _firstNameCtrl.text = parts.first;
+      return;
+    }
+    _firstNameCtrl.text = parts.sublist(0, parts.length - 1).join(' ');
+    _lastNameCtrl.text = parts.last;
+  }
+
   /// The address exactly as written to the order and sent to the server.
   Map<String, dynamic> _addressMap() => {
-        'name': _nameCtrl.text.trim(),
+        'name': _fullName,
         'phone': _phoneCtrl.text.trim(),
         'address': _addressCtrl.text.trim(),
         'city': _cityCtrl.text.trim(),
@@ -155,7 +173,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         customerDeliveryState: _state,
         // Same values createOrdersAfterPayment writes later — sent now so
         // the server can rebuild the order if that later step never runs.
-        customerName: _nameCtrl.text.trim(),
+        customerName: _fullName,
         customerPhone: _phoneCtrl.text.trim(),
         customerAddress: _addressMap(),
         deliveryBySeller: delivery.bySellerCharge,
@@ -201,7 +219,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         'description': 'Order Payment',
         'prefill': {
           'contact': user.phoneNumber,
-          'name': _nameCtrl.text.trim(),
+          'name': _fullName,
         },
         'theme': {'color': '#2E7D32'},
         // Seconds the checkout SDK waits before giving up and reporting
@@ -294,7 +312,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     await _orderRepo.createOrdersAfterPayment(
       // Each line at the price the server charged, so the order matches it.
       items: withServerPrices(items, _serverItems),
-      customerName: _nameCtrl.text.trim(),
+      customerName: _fullName,
       customerPhone: user.phoneNumber ?? '',
       customerAddress: _addressMap(),
       razorpayOrderId: razorpayOrderId,
@@ -399,7 +417,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final profile = ref.watch(currentUserProvider).value;
     if (!_prefilled && profile != null) {
       _prefilled = true;
-      if (_nameCtrl.text.isEmpty) _nameCtrl.text = profile.name;
+      if (_firstNameCtrl.text.isEmpty && _lastNameCtrl.text.isEmpty) _prefillName(profile.name);
       if (_addressCtrl.text.isEmpty) _addressCtrl.text = profile.address ?? '';
       if (_cityCtrl.text.isEmpty) _cityCtrl.text = profile.city ?? '';
       if (_pincodeCtrl.text.isEmpty) _pincodeCtrl.text = profile.pincode ?? '';
@@ -485,8 +503,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     const SizedBox(height: 10),
                     UseMyLocationButton(onLocated: _applyFields),
                     const Divider(height: 26),
-                    _field(_nameCtrl, 'Full Name', Icons.person_outline,
-                        validator: _required),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _field(_firstNameCtrl, 'First Name *', Icons.person_outline,
+                              textCapitalization: TextCapitalization.words,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Enter your first name'
+                                  : null),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _field(_lastNameCtrl, 'Last Name *', Icons.badge_outlined,
+                              textCapitalization: TextCapitalization.words,
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Enter your surname'
+                                  : null),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     _field(_phoneCtrl, 'Phone Number', Icons.phone_outlined,
                         keyboardType: TextInputType.phone,
@@ -816,10 +852,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     List<TextInputFormatter>? inputFormatters,
     int maxLines = 1,
     String? Function(String?)? validator,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       inputFormatters: inputFormatters,
       maxLines: maxLines,
       style: AppTextStyles.body,

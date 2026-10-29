@@ -16,13 +16,14 @@ import { parseVariantWeightKg } from "../utils/weight";
 import { computeLinePricing } from "../utils/gst";
 import { resolveDeliverySlabs, chargeFromSlabs, type DeliveryType } from "../utils/delivery";
 
-type AddressField = "customerName" | "customerPhone" | "addressArea" | "addressCity" | "addressDistrict" | "addressState" | "addressPincode";
+type AddressField = "customerFirstName" | "customerLastName" | "customerPhone" | "addressArea" | "addressCity" | "addressDistrict" | "addressState" | "addressPincode";
 
 type CartViewProps = {
   items: CartItem[];
   isLoggedIn: boolean;
   isCustomer: boolean;
-  customerName: string;
+  customerFirstName: string;
+  customerLastName: string;
   customerPhone: string;
   addressArea: string;
   addressCity: string;
@@ -750,7 +751,8 @@ export default function CartView({
   items,
   isLoggedIn,
   isCustomer,
-  customerName,
+  customerFirstName,
+  customerLastName,
   customerPhone,
   addressArea,
   addressCity,
@@ -1194,13 +1196,29 @@ export default function CartView({
 
         {isLoggedIn ? (
           <div className="mt-5 grid gap-3">
-            {/* Name */}
-            <input
-              value={customerName}
-              onChange={(e) => onCustomerFieldChange("customerName", e.target.value)}
-              placeholder={t('cartFullNamePlaceholder')}
-              className="rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
-            />
+            {/* Name — first and last (surname) are both compulsory */}
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={customerFirstName}
+                onChange={(e) => onCustomerFieldChange("customerFirstName", e.target.value)}
+                placeholder={`${t('cartFirstNamePlaceholder')} *`}
+                aria-label={t('cartFirstNamePlaceholder')}
+                autoComplete="given-name"
+                required
+                maxLength={40}
+                className="min-w-0 rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+              />
+              <input
+                value={customerLastName}
+                onChange={(e) => onCustomerFieldChange("customerLastName", e.target.value)}
+                placeholder={`${t('cartLastNamePlaceholder')} *`}
+                aria-label={t('cartLastNamePlaceholder')}
+                autoComplete="family-name"
+                required
+                maxLength={40}
+                className="min-w-0 rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+              />
+            </div>
             {/* Phone — auto-populated from profile */}
             <input
               value={customerPhone}
