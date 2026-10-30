@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import '../data/server_priced_items.dart';
 import '../../../core/payments/app_razorpay.dart';
 import '../../../core/constants/app_colors.dart';
@@ -65,6 +68,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _reviewService = AppReviewService();
 
   bool _isLoading = false;
+
+  /// Cart lines that can't be delivered to the chosen state — a
+  /// manufacturer's licence, a store's delivery coverage or a manufacturer's
+  /// in-store-only lock — keyed by catalogId|sellerPhone, with the reason.
+  /// From POST /api/cart/availability (the rules checkout enforces).
+  Map<String, String> _areaWarnings = const {};
+  int _areaCheckGen = 0;
   bool _prefilled = false;
   String? _error;
   String? _razorpayOrderId;
@@ -102,7 +112,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   /// Sets the delivery state and lets the whole cart re-price for it.
   void _setState(String? value) {
+    final changed = value != _state;
     setState(() => _state = value);
+    if (changed) unawaited(_checkSellArea());
     // Off the build phase: a provider write must not happen while building.
     Future.microtask(() {
       if (mounted) ref.read(deliveryStateProvider.notifier).state = value ?? '';
@@ -148,8 +160,60 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         'pincode': _pincodeCtrl.text.trim(),
       };
 
+  static String _areaKey(String catalogId, String sellerPhone) => '$catalogId|$sellerPhone';
+
+  /// Asks the server which cart lines can't reach [_state]. Returns the
+  /// warnings (also kept in state). Best-effort: a failure shows none —
+  /// checkout still enforces the same rules.
+  Future<Map<String, String>> _checkSellArea() async {
+    final gen = ++_areaCheckGen;
+    final state = (_state ?? '').trim();
+    final items = ref.read(cartProvider);
+    if (state.isEmpty || items.isEmpty) {
+      if (mounted) setState(() => _areaWarnings = const {});
+      return const {};
+    }
+    try {
+      final res = await http
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/cart/availability'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'state': state,
+              'items': [
+                for (final i in items)
+                  {'productId': i.catalogId, 'sellerId': i.sellerPhone, 'sellerPhone': i.sellerPhone},
+              ],
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final next = <String, String>{
+        for (final r in (body['items'] as List? ?? const []).whereType<Map>())
+          if (r['available'] == false && (r['message'] ?? '').toString().isNotEmpty)
+            _areaKey('${r['productId']}', '${r['sellerId']}'): '${r['message']}',
+      };
+      if (mounted && gen == _areaCheckGen) setState(() => _areaWarnings = next);
+      return next;
+    } catch (_) {
+      if (mounted && gen == _areaCheckGen) setState(() => _areaWarnings = const {});
+      return const {};
+    }
+  }
+
   Future<void> _proceedToPayment() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Re-check where these items can be delivered, for the state chosen now.
+    final blocked = await _checkSellArea();
+    if (blocked.isNotEmpty) {
+      if (mounted) {
+        setState(() => _error = blocked.length == 1
+            ? "1 item can't be delivered to this address. Remove it or choose another store."
+            : "${blocked.length} items can't be delivered to this address. Remove them or choose another store.");
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -406,6 +470,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget build(BuildContext context) {
     final items = ref.watch(cartProvider);
     final subtotal = ref.watch(cartTotalProvider);
+    // Only lines still in the cart count (a removed item's warning is moot).
+    final blockedHere = items
+        .where((i) => _areaWarnings.containsKey(_areaKey(i.catalogId, i.sellerPhone)))
+        .length;
     final savings = ref.watch(cartSavingsProvider);
     final gstIncluded = ref.watch(cartGstIncludedProvider);
     final deliveryAsync = ref.watch(deliveryChargeProvider);
@@ -702,6 +770,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
               ),
 
+              // Items that can't be delivered to the chosen state, and why.
+              if (blockedHere > 0) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Not available for your address',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.error, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      for (final i in items)
+                        if (_areaWarnings[_areaKey(i.catalogId, i.sellerPhone)] case final msg?)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('• ${i.catalogName}: $msg',
+                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.onSurface)),
+                          ),
+                      const SizedBox(height: 6),
+                      Text('Remove these items or choose another store to continue.',
+                          style: AppTextStyles.caption),
+                    ],
+                  ),
+                ),
+              ],
+
               if (_error != null) ...[
                 const SizedBox(height: 14),
                 Container(
@@ -775,7 +876,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: (_isLoading || estimating)
+                  onPressed: (_isLoading || estimating || blockedHere > 0)
                       ? null
                       : _proceedToPayment,
                   icon: const Icon(Icons.lock_outlined, size: 18),
