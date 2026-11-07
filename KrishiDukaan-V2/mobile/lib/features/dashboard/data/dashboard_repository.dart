@@ -1396,6 +1396,22 @@ class DashboardRepository {
     });
   }
 
+  /// Asks the shipping functions to act on a courier order: request the
+  /// pickup, or (test bookings only, checked on the server) act as the courier.
+  /// This field is the only shipping data a seller can write.
+  Future<void> requestShipmentAction(String orderId, String action,
+      {String? event}) async {
+    await _db.collection('orders').doc(orderId).update({
+      'shipmentRequest': {
+        'id': '${DateTime.now().microsecondsSinceEpoch}',
+        'action': action,
+        if (event != null) 'event': event,
+        'at': DateTime.now().toIso8601String(),
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   // ── Image upload ──────────────────────────────────────────────────────────
 
   /// Uploads a product/listing image and returns its public download URL.

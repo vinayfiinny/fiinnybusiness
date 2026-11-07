@@ -157,7 +157,14 @@ SellerEarnings earningsFromStats(
 /// OrderModel.total already falls back to `grandTotal` then `subtotal`, which
 /// covers the mobile/web field split (mobile writes `total`, web writes
 /// `grandTotal`).
-double _grossFor(OrderModel order) => order.total;
+///
+/// When the platform paid the courier the delivery fee isn't the seller's, same
+/// as grossFor in app/dashboard/_lib/seller-earnings.ts.
+double _grossFor(OrderModel order) {
+  if (order.shipment?.platformKeptDelivery != true) return order.total;
+  final value = order.total - order.deliveryCharge;
+  return value > 0 ? value : 0;
+}
 
 /// What the seller is actually owed: their share less anything refunded. A
 /// fully refunded order is caught earlier by its status; this handles the

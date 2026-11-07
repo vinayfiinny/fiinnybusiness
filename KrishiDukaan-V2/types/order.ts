@@ -399,6 +399,62 @@ export type OrderTracking = {
   sends: TrackingSend[];
 };
 
+/** Where a parcel is. Written only by functions/src/shipping. */
+export type ShipmentStage =
+  | "booking" | "booked" | "pickup_requested" | "picked_up" | "in_transit"
+  | "out_for_delivery" | "delivered" | "returning" | "returned" | "lost"
+  | "cancelling" | "self";
+
+export type OrderShipment = {
+  mode?: "courier" | "self";
+  stage: ShipmentStage;
+  active?: boolean;
+  /** A test booking: real price, invented tracking number, nothing ships. */
+  simulated?: boolean;
+  carrier?: "delhivery" | "shiprocket";
+  service?: string;
+  awb?: string;
+  trackingUrl?: string;
+  labelUrl?: string | null;
+  pickupDate?: string;
+  etaDays?: number | null;
+  weightKg?: number;
+  weightGuessed?: boolean;
+  /** What the courier charges us, and what the customer paid. */
+  cost?: number;
+  customerPaid?: number;
+  platformGap?: number;
+  /** The platform keeps the delivery fee; it is not part of the seller's payout. */
+  platformKeptDelivery?: boolean;
+  reasonText?: string;
+  needsAttention?: boolean;
+  attentionNote?: string;
+};
+
+export const COURIER_NAMES = { delhivery: "Delhivery", shiprocket: "Shiprocket" } as const;
+
+export const SHIPMENT_STAGE_TEXT: Record<ShipmentStage, string> = {
+  booking: "Booking the courier",
+  booked: "Courier booked",
+  pickup_requested: "Waiting for courier pickup",
+  picked_up: "Picked up by courier",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  returning: "Returning to the seller",
+  returned: "Returned to the seller",
+  lost: "Lost by the courier",
+  cancelling: "Cancelling the courier",
+  self: "Delivered by the seller",
+};
+
+/** True for a parcel the courier moves: the seller can't advance its status. */
+export const isCourierOrder = (o: { shipment?: OrderShipment | null }) => o.shipment?.mode === "courier";
+
+export const SHIPMENT_LEFT_SELLER: ShipmentStage[] = [
+  "picked_up", "in_transit", "out_for_delivery", "delivered", "returning", "returned", "lost",
+];
+
 export type OrderDoc = {
   id: string;
   customerId: string;
@@ -453,6 +509,8 @@ export type OrderDoc = {
   statusHistory?: StatusHistoryEntry[];
   /** Shipment tracking link + send history. Server-written only. */
   tracking?: OrderTracking;
+  /** Courier booking, or the reason the seller delivers. Server-written only. */
+  shipment?: OrderShipment;
   payment?: PaymentInfo;
   /**
    * Razorpay Route payout state, written by the releaseTransferOnDelivery

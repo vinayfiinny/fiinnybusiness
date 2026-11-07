@@ -41,6 +41,19 @@ const COPY_COLLECTIONS = [
   'hubs',
   'appVersion',
   'deliverySettings',
+  // Marketplace read models, so UAT lists what production lists
+  'marketplaceCards',
+  'marketplaceSearch',
+  'cardMembers',
+  'storeDirectory',
+  // Config the checkout and home page read (settings holds no secrets)
+  'settings',
+  'siteContent',
+  'banners',
+  'promoCodes',
+  // Shop helpers
+  'shopTeams',
+  'staffIndex',
 ];
 
 // ─── Never copy these (personal / financial data) ─────────────────────────────

@@ -95,6 +95,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Status alone isn't enough here: the courier may have collected the parcel
+    // moments ago with the update still on its way. Goods on the road can't be
+    // rejected, and the customer must not be refunded for them.
+    if (order.shipment?.mode === "courier" && !["booking", "booked", "pickup_requested"].includes(order.shipment.stage)) {
+      return NextResponse.json(
+        { error: "The courier already has this parcel, so it can't be rejected. Contact support." },
+        { status: 409 },
+      );
+    }
+
     // First rejection → offer the order to every other seller who sells all of
     // it online, for 24h, before refunding (lib/order-reassignment.ts). One
     // round only: an order that was already reassigned once is refunded now.

@@ -34,7 +34,8 @@ export async function expirySecret(): Promise<string> {
 }
 
 /** Where the Next API (and so the expiry route) is served. */
-const APP_BASE_URL = "https://krishidukan.com";
+// Set per project in functions/.env.<project>, so UAT never calls the live website.
+const APP_BASE_URL = process.env.APP_BASE_URL || "https://krishidukan.com";
 
 /**
  * A candidate seller was offered a rejected order → tell them. The offer doc

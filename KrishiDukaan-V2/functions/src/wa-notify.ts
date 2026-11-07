@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { logger } from "firebase-functions/v2";
 
 type WaTemplate =
+  | "order_tracking_link"
   | "subscription_welcome"
   | "subscription_expiry"
   | "order_notification"

@@ -1,0 +1,96 @@
+/**
+ * The decisions behind courier automation (functions/src/shipping/pure.ts).
+ *
+ *   npx tsx scripts/tests/shipping.test.ts
+ */
+import assert from "node:assert/strict";
+import {
+  DEFAULT_CONFIG as C, canCancelAt, courierBlocker, delhiveryStage, nextPickupDate, orderStatusFor, packKg,
+  parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shiprocketStage, shouldApply,
+  withinReassignCap, type Quote,
+} from "../../functions/src/shipping/pure";
+
+// A config that isn't there, or is mistyped, must never mean live or on.
+assert.equal(parseConfig(undefined).enabled, false);
+assert.equal(parseConfig({ enabled: "true" }).enabled, false);
+assert.equal(parseConfig({ enabled: true, mode: "LIVE" }).mode, "simulate");
+assert.equal(parseConfig({ mode: "live" }).mode, "live");
+
+// Weight
+assert.equal(packKg("500 ml"), 0.5);
+assert.equal(packKg("5 Ltr"), 5);
+assert.equal(packKg("250gm"), 0.25);
+assert.equal(packKg("1"), 0);
+assert.deepEqual(parcelKg([{ variantUnit: "1L", qty: 2 }], C), { kg: 2.2, guessed: false });
+assert.deepEqual(parcelKg([{ variantUnit: "100ml" }], C), { kg: 0.5, guessed: false }); // minimum
+assert.deepEqual(parcelKg([{ unit: "1", quantity: 3 }], C), { kg: 3.3, guessed: true }); // unreadable size flagged
+
+// Addresses: both shapes that really exist on orders
+const web = parseCustomerAddress("Plot 4, Nandgaon, Ahmednagar, Maharashtra, 414402", "Maharashtra");
+assert.equal(web.pincode, "414402");
+assert.equal(web.city, "Nandgaon");
+assert.equal(web.state, "Maharashtra");
+assert.equal(parseCustomerAddress({ address: "Road 1", city: "Pune", state: "MH", pincode: "411001" }).pincode, "411001");
+assert.equal(parseCustomerAddress({ address: "near 411001 stop", pincode: "" }).pincode, "411001");
+assert.equal(parseCustomerAddress("no pin here").pincode, "");
+assert.equal(readSellerPlace({ address: { line1: "A", pincode: "413213", city: "Mohol" } }).pincode, "413213");
+assert.equal(readSellerPlace({ address: "Shop 1, Pune 411001" }).pincode, "411001");
+assert.equal(readSellerPlace({ pincode: "000000" }).pincode, "");
+
+// Choosing a courier
+const q = (carrier: Quote["carrier"], cost: number, service = "S", etaDays?: number): Quote => ({ carrier, service, cost, etaDays });
+assert.equal(rankQuotes([q("shiprocket", 179), q("delhivery", 124)])[0]!.carrier, "delhivery");
+assert.equal(rankQuotes([q("delhivery", 100, "S", 5), q("shiprocket", 100, "X", 2)])[0]!.carrier, "shiprocket"); // tie: faster
+assert.equal(rankQuotes([q("delhivery", 0), q("shiprocket", NaN)]).length, 0); // a ₹0 quote is a failure, not a bargain
+const block = (o: Partial<Parameters<typeof courierBlocker>[0]>) => courierBlocker({ pickupPin: "414402", dropPin: "411001", declaredValue: 1000, categories: [], cfg: C, ...o });
+assert.equal(block({}), null);
+assert.equal(block({ pickupPin: "" }), "no_pickup_address");
+assert.equal(block({ dropPin: "12" }), "no_delivery_pincode");
+assert.equal(block({ declaredValue: 50000 }), "over_value_limit");
+assert.equal(block({ categories: ["Pesticide"], cfg: { ...C, blockedCategories: ["pesticide"] } }), "blocked_category");
+
+// Reassignment limit
+assert.equal(withinReassignCap(400, 1000, 50), true);
+assert.equal(withinReassignCap(501, 1000, 50), false);
+assert.equal(withinReassignCap(null, 1000, 50), true); // no courier: seller delivers
+assert.equal(withinReassignCap(9999, 1000, 0), true); // 0 = no limit
+
+// Couriers repeat events and send them out of order
+assert.equal(shouldApply("delivered", "in_transit"), false);
+assert.equal(shouldApply("in_transit", "in_transit"), false);
+assert.equal(shouldApply("in_transit", "picked_up"), false);
+assert.equal(shouldApply("booked", "in_transit"), true); // missed events are fine
+assert.equal(shouldApply("out_for_delivery", "returning"), true);
+assert.equal(shouldApply("returning", "delivered"), false);
+assert.equal(shouldApply("returning", "returned"), true);
+assert.equal(shouldApply("self", "delivered"), false);
+assert.equal(shouldApply("cancelling", "picked_up"), false);
+
+// Status moves
+assert.equal(orderStatusFor("picked_up", "accepted"), "dispatched");
+assert.equal(orderStatusFor("in_transit", "dispatched"), null);
+assert.equal(orderStatusFor("delivered", "accepted"), "delivered");
+assert.equal(orderStatusFor("delivered", "cancelled"), null); // a refunded order is never reopened
+assert.equal(orderStatusFor("delivered", "reassigning"), null);
+assert.equal(orderStatusFor("returning", "dispatched"), null);
+assert.equal(orderStatusFor("out_for_delivery", "delivered"), null);
+assert.equal(canCancelAt("pickup_requested"), true);
+assert.equal(canCancelAt("picked_up"), false);
+
+// Courier status words
+assert.equal(delhiveryStage("Manifested", "UD"), null);
+assert.equal(delhiveryStage("In Transit", "UD"), "in_transit");
+assert.equal(delhiveryStage("Dispatched", "UD"), "out_for_delivery");
+assert.equal(delhiveryStage("Delivered", "DL"), "delivered");
+assert.equal(delhiveryStage("RTO", "DL"), "returned");
+assert.equal(delhiveryStage("In Transit", "RT"), "returning");
+assert.equal(shiprocketStage("RTO DELIVERED"), "returned");
+assert.equal(shiprocketStage("RTO_INITIATED"), "returning");
+assert.equal(shiprocketStage("OUT FOR DELIVERY"), "out_for_delivery");
+assert.equal(shiprocketStage("PICKUP SCHEDULED"), null);
+
+// Pickups skip Sunday. 2026-11-07 is a Saturday.
+assert.equal(nextPickupDate(new Date("2026-11-07T06:00:00Z")), "2026-11-09");
+assert.equal(nextPickupDate(new Date("2026-11-05T06:00:00Z")), "2026-11-06");
+
+console.log("shipping: all passed");

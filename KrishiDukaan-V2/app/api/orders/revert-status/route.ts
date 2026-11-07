@@ -158,6 +158,11 @@ export async function POST(req: NextRequest) {
     const fromStatus = String(order.status ?? "") as OrderStatus;
 
     // ── Transition validity ──
+    // A courier's parcel follows the courier, not a button.
+    if (order.shipment?.mode === "courier" && !auth.isAdmin) {
+      return NextResponse.json({ error: "This order is with the courier, so its status updates by itself." }, { status: 409 });
+    }
+
     if (!REVERTABLE_STATUSES.includes(fromStatus)) {
       return NextResponse.json(
         { error: `A ${fromStatus || "new"} order cannot be reverted. Only dispatched, out-for-delivery and delivered orders can.` },

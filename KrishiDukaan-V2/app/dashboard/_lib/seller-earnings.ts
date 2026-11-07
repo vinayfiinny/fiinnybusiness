@@ -75,6 +75,7 @@ export type OrderLike = {
   };
   /** Razorpay's view of this order's transfer (functions/src/payouts/payout-status.ts). */
   payout?: OrderPayout;
+  shipment?: { platformKeptDelivery?: boolean } | null;
 };
 
 /** One order's transfer as Razorpay last reported it. */
@@ -149,11 +150,13 @@ function toDate(v: unknown): Date | null {
  *  the field name. */
 export function grossFor(order: OrderLike): number {
   const value = order.total ?? order.grandTotal;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  // Fall back to the parts when neither total field is present.
-  return (
-    (order.subtotal ?? 0) + (order.deliveryCharge ?? 0) + (order.totalGst ?? 0)
-  );
+  const total = typeof value === "number" && Number.isFinite(value)
+    ? value
+    // Fall back to the parts when neither total field is present.
+    : (order.subtotal ?? 0) + (order.deliveryCharge ?? 0) + (order.totalGst ?? 0);
+  // The platform paid the courier on this order, so the delivery fee is not the
+  // seller's. (functions/src/shipping/engine.ts takes it back from the transfer.)
+  return order.shipment?.platformKeptDelivery ? Math.max(0, total - (order.deliveryCharge ?? 0)) : total;
 }
 
 /** What the seller is actually owed: their share less anything refunded to the

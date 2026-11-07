@@ -12,7 +12,8 @@ import { expirySecret } from "../notifications/reassignment";
  * and refuses orders that aren't accepted yet.
  */
 
-const APP_BASE_URL = "https://krishidukan.com";
+// Set per project in functions/.env.<project>, so UAT never calls the live website.
+const APP_BASE_URL = process.env.APP_BASE_URL || "https://krishidukan.com";
 
 async function requestInvoice(orderId: string): Promise<boolean> {
   try {

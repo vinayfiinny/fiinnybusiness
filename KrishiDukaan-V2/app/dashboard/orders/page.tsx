@@ -31,15 +31,17 @@ import {
   Shuffle,
   TrendingDown,
 } from "lucide-react";
-import { auth, fetchIncomingOrdersForSeller, fetchReroutedAwayOrdersForSeller, updateOrderStatus } from "../../firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import { auth, db, fetchIncomingOrdersForSeller, fetchReroutedAwayOrdersForSeller, updateOrderStatus } from "../../firebase";
 import { PageHeader } from "../_components/page-header";
 import { formatCustomerAddress, normalizeOrderItems, orderGrandTotal } from "../../../types/order";
-import { ORDER_STATUS_FLOW, REVERTABLE_STATUSES, isInvoiceReady, validRevertTargets, type OrderDoc, type OrderStatus } from "../../../types/order";
+import { ORDER_STATUS_FLOW, REVERTABLE_STATUSES, SHIPMENT_LEFT_SELLER, isCourierOrder, isInvoiceReady, validRevertTargets, type OrderDoc, type OrderStatus } from "../../../types/order";
 import { useI18n } from "../../i18n/I18nContext";
 import { openInvoice } from "../../utils/invoice-generator";
 import { OrderRequestsPanel } from "../_components/order-requests-panel";
 import { fetchOpenOffers } from "../_lib/order-offers";
 import { DispatchDialog, TrackingDialog } from "./_tracking-dialogs";
+import ShipmentCard from "../../views/ShipmentCard";
 import { trackingSendsRemaining, MAX_TRACKING_SENDS } from "./_tracking";
 
 // Progression shown to the seller. Imported rather than redeclared so the
@@ -90,6 +92,14 @@ const NEXT_ACTIONS: Record<OrderStatus, { next: OrderStatus; label: string; colo
   // firestore.rules refuses any seller write to it until someone accepts.
   reassigning: [],
 };
+
+/** A courier moves its own orders: the seller keeps only Reject, until pickup. */
+function actionsFor(order: OrderDoc) {
+  const all = NEXT_ACTIONS[order.status] || [];
+  if (!isCourierOrder(order)) return all;
+  if (order.shipment && SHIPMENT_LEFT_SELLER.includes(order.shipment.stage)) return [];
+  return all.filter((a) => a.next === "rejected");
+}
 
 type FilterTab = "all" | "rerouted" | OrderStatus;
 type ViewTab = "orders" | "payments" | "requests";
@@ -576,8 +586,11 @@ function OrderDetailModal({
             </div>
           )}
 
-          {/* Shipment tracking — only once the parcel has left the seller */}
-          {["dispatched", "out_for_delivery", "delivered"].includes(order.status) && (() => {
+          {order.shipment && <ShipmentCard order={order} sellerView />}
+
+          {/* Shipment tracking — only once the parcel has left the seller.
+              A courier order shows the card above instead. */}
+          {!isCourierOrder(order) && ["dispatched", "out_for_delivery", "delivered"].includes(order.status) && (() => {
             const remaining = trackingSendsRemaining(order);
             const used = MAX_TRACKING_SENDS - remaining;
             const link = order.tracking?.url;
@@ -635,7 +648,7 @@ function OrderDetailModal({
                 <Download className="w-3.5 h-3.5" /> Download Invoice
               </button>
             )}
-            {REVERTABLE_STATUSES.includes(order.status) && order.status !== "delivered" && (
+            {!isCourierOrder(order) && REVERTABLE_STATUSES.includes(order.status) && order.status !== "delivered" && (
               <button
                 type="button"
                 disabled={updating}
@@ -1104,6 +1117,17 @@ export default function OrdersPage() {
       ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
       : { key, dir: "desc" });
 
+  // The courier booking arrives moments after Accept, and status then moves on
+  // its own: keep the open order live. One document, only while it is open.
+  useEffect(() => {
+    if (!selectedId) return;
+    return onSnapshot(doc(db, "orders", selectedId), (snap) => {
+      const data = snap.data();
+      if (!data) return;
+      setOrders((list) => list.map((o) => (o.id === selectedId ? ({ ...o, ...data, id: o.id } as typeof o) : o)));
+    }, () => { /* the list view still has the last loaded copy */ });
+  }, [selectedId]);
+
   const selectedOrder = selectedId
     ? (orders.find((o) => o.id === selectedId) ?? reroutedOrders.find((o) => o.id === selectedId) ?? null)
     : null;
@@ -1458,7 +1482,7 @@ export default function OrdersPage() {
                         const config = isReroutedAway
                           ? { badge: "bg-orange-100 text-orange-800", label: "Rerouted", icon: Shuffle }
                           : statusConfig(order.status);
-                        const actions = isReroutedAway ? [] : (NEXT_ACTIONS[order.status] || []);
+                        const actions = isReroutedAway ? [] : actionsFor(order);
                         const items = normalizeOrderItems(order.items as any);
                         const isUpdating = updatingId === order.id;
                         return (
@@ -1537,7 +1561,7 @@ export default function OrdersPage() {
                                     ))}
                                   </div>
                                 )}
-                                {!isReroutedAway && REVERTABLE_STATUSES.includes(order.status) && order.status !== "delivered" && (
+                                {!isReroutedAway && !isCourierOrder(order) && REVERTABLE_STATUSES.includes(order.status) && order.status !== "delivered" && (
                                   <button
                                     type="button"
                                     disabled={isUpdating}
@@ -1581,7 +1605,7 @@ export default function OrdersPage() {
         <OrderDetailModal
           order={selectedOrder}
           seller={sellerInfo}
-          actions={isSelectedRerouted ? [] : (NEXT_ACTIONS[selectedOrder.status] || [])}
+          actions={isSelectedRerouted ? [] : actionsFor(selectedOrder)}
           updating={updatingId === selectedOrder.id}
           onAdvance={onAdvance}
           onOpenTracking={(id) => setTrackingForId(id)}

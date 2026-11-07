@@ -1868,6 +1868,22 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   });
 }
 
+/**
+ * Asks the shipping functions to act on a courier order: request the pickup, or
+ * (test bookings only, checked on the server) pretend to be the courier. This
+ * field is the only shipping data a seller can write.
+ */
+export async function requestShipmentAction(
+  orderId: string,
+  action: "pickup" | "simulate",
+  event?: string,
+): Promise<void> {
+  await updateDoc(doc(db, "orders", orderId), {
+    shipmentRequest: { id: crypto.randomUUID(), action, ...(event ? { event } : {}), at: new Date().toISOString() },
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function updateOrderPayment(orderId: string, paymentInfo: {
   razorpayOrderId: string;
   razorpayPaymentId: string;

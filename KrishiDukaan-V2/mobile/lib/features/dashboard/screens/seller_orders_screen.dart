@@ -19,6 +19,7 @@ import '../../../core/utils/currency_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_view.dart';
 import '../../../core/widgets/load_more_tile.dart';
+import '../../orders/widgets/shipment_card.dart';
 import '../data/dashboard_repository.dart';
 import '../data/order_offers_repository.dart';
 import '../providers/dashboard_provider.dart';
@@ -795,6 +796,11 @@ class _SellerOrderCard extends StatelessWidget {
                 _OrderProgressBar(status: order.status),
                 const SizedBox(height: 16),
 
+                if (order.shipment != null) ...[
+                  ShipmentCard(order: order, sellerView: true),
+                  const SizedBox(height: 12),
+                ],
+
                 // Action buttons & Invoice download integrated
                 _ActionButtons(
                   order: order,
@@ -1189,7 +1195,15 @@ class _ActionButtonsState extends State<_ActionButtons> {
               child: CircularProgressIndicator(strokeWidth: 2)));
     }
 
-    final actions = _nextActionsFor(widget.order.status);
+    // A courier moves its own orders: the seller keeps only Reject, until pickup.
+    final shipment = widget.order.shipment;
+    final actions = shipment == null || !shipment.isCourier
+        ? _nextActionsFor(widget.order.status)
+        : shipment.leftSeller
+            ? const <_OrderAction>[]
+            : _nextActionsFor(widget.order.status)
+                .where((a) => a.next == 'rejected')
+                .toList();
     final hasActions = actions.isNotEmpty;
 
     final invoiceButton = OutlinedButton.icon(

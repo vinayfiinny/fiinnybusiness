@@ -6,6 +6,7 @@ import { COMPANY } from "../lib/legal-constants";
 import { refundMayChange, refundStageFor, type RefundStage } from "../lib/refund-view";
 import { ORDER_STATUS_FLOW, isInvoiceReady, normalizeOrderItems, orderGrandTotal, type OrderDoc, type OrderStatus } from "../../types/order";
 import { useI18n } from "../i18n/I18nContext";
+import ShipmentCard from "./ShipmentCard";
 import { openInvoice } from "../utils/invoice-generator";
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -332,6 +333,7 @@ export default function MyOrdersView({ customerId }: { customerId: string }) {
 
           {/* Timeline */}
           <OrderTimeline status={order.status} t={t} />
+          {order.shipment?.mode === "courier" && <ShipmentCard order={order} />}
 
           {/* Refund — where the customer's money is */}
           {(() => {
