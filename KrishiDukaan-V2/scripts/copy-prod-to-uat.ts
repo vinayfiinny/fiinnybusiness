@@ -5,6 +5,15 @@
  *
  * Safe to run multiple times (overwrites existing UAT docs with prod versions).
  *
+ * --prune also deletes CATALOGUE docs that production no longer has (products,
+ * inventory, marketplace cards/search/members), so the Market page doesn't keep
+ * showing deleted products with old photos. Users, stores, sellers, orders and
+ * anything owned by a UAT test login are never pruned. A backup of every pruned
+ * doc is written first.
+ * --yes skips the confirmation prompt.
+ *
+ *   npm run copy:prod-to-uat -- --prune
+ *
  * Run:
  *   npm run copy:prod-to-uat
  *
@@ -60,6 +69,12 @@ const COPY_COLLECTIONS = [
 // users, uidIndex, profiles, orders, payments, failedPayments, subscriptions,
 // manufacturerNetwork, manufacturerRetailers, adminLogs, contactMessages,
 // manufacturer_contacts, seatListings, retailerSeatListings, notifications, carts
+
+// Catalogue collections that --prune may delete from (UAT docs missing in prod).
+const PRUNE_COLLECTIONS = ['products', 'inventory', 'marketplaceCards', 'marketplaceSearch', 'cardMembers'];
+const ARGS = process.argv.slice(2);
+const PRUNE = ARGS.includes('--prune');
+const YES = ARGS.includes('--yes');
 
 const PROD_PROJECT = 'krishidukan-e8315';
 const UAT_PROJECT  = 'karan-arjun-uat';
@@ -151,6 +166,50 @@ async function copyCollection(
   return totalWritten;
 }
 
+/** Phones of the UAT test logins (Auth testPhoneNumbers): their data is never pruned. */
+async function testLoginPhones(): Promise<Set<string>> {
+  const { GoogleAuth } = await import('google-auth-library');
+  const client = await new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] }).getClient();
+  const res = await client.request<{ signIn?: { phoneNumber?: { testPhoneNumbers?: Record<string, string> } } }>({
+    url: `https://identitytoolkit.googleapis.com/admin/v2/projects/${UAT_PROJECT}/config`,
+    headers: { 'x-goog-user-project': UAT_PROJECT },
+  });
+  const nums = Object.keys(res.data.signIn?.phoneNumber?.testPhoneNumbers ?? {});
+  return new Set(nums.map((n) => n.replace(/\D/g, '').slice(-10)));
+}
+
+async function prune(src: Firestore, dst: Firestore): Promise<void> {
+  const keep = await testLoginPhones();
+  const owner = (d: any) =>
+    [d.ownerPhone, d.retailerPhone, d.manufacturerPhone, d.createdByPhone, d.sellerPhone, d.ownerId]
+      .map((v) => String(v ?? '').replace(/\D/g, '').slice(-10))
+      .find((v) => v.length === 10) ?? '';
+  const backup: Record<string, Record<string, unknown>> = {};
+  const toDelete: Record<string, FirebaseFirestore.DocumentReference[]> = {};
+  console.log(`\nPruning catalogue docs missing in prod (keeping ${keep.size} test logins' data)...`);
+  for (const col of PRUNE_COLLECTIONS) {
+    const [p, u] = await Promise.all([src.collection(col).select().get(), dst.collection(col).get()]);
+    const inProd = new Set(p.docs.map((d) => d.id));
+    const gone = u.docs.filter((d) => !inProd.has(d.id) && !keep.has(owner(d.data())));
+    backup[col] = Object.fromEntries(gone.map((d) => [d.id, d.data()]));
+    toDelete[col] = gone.map((d) => d.ref);
+  }
+  // Backup BEFORE deleting anything.
+  const fs = await import('fs');
+  const file = `uat-prune-backup-${Date.now()}.json`;
+  fs.writeFileSync(file, JSON.stringify(backup));
+  console.log(`  backup: ${file}`);
+  for (const col of PRUNE_COLLECTIONS) {
+    const refs = toDelete[col];
+    for (let i = 0; i < refs.length; i += BATCH_SIZE) {
+      const batch = dst.batch();
+      refs.slice(i, i + BATCH_SIZE).forEach((r) => batch.delete(r));
+      await batch.commit();
+    }
+    console.log(`  ${col}: ${refs.length} removed`);
+  }
+}
+
 async function main() {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
@@ -167,7 +226,8 @@ async function main() {
   console.log('                 subscriptions, adminLogs, contactMessages');
   console.log('');
 
-  const ok = await confirm('Type "yes" to continue: ');
+  if (PRUNE) console.log('  --prune: catalogue docs deleted from prod are removed from UAT (backup first)\n');
+  const ok = YES || await confirm('Type "yes" to continue: ');
   if (!ok) {
     console.log('Aborted.');
     process.exit(0);
@@ -191,6 +251,7 @@ async function main() {
   }
 
   console.log(`\n✓ Done. ${grandTotal} documents written to ${UAT_PROJECT}.`);
+  if (PRUNE) await prune(prodDb, uatDb);
   process.exit(0);
 }
 
