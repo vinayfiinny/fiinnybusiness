@@ -12,7 +12,10 @@ import { getAdminDb } from "../../../lib/firebase-admin";
  */
 
 type PinInfo = { pincode: string; city: string; district: string; taluka: string; state: string; areas: string[] };
-const mem = new Map<string, PinInfo | null>();
+const mem = new Map<string, PinInfo>();
+// "Not found" is remembered briefly only: India Post can fail for a moment, and a
+// real pincode must not stay "not found" until the server restarts.
+const missUntil = new Map<string, number>();
 
 const tidy = (v: unknown) => {
   const s = String(v ?? "").trim();
@@ -49,9 +52,10 @@ export async function GET(_req: NextRequest, { params }: { params: { pin: string
     return NextResponse.json({ error: "Enter a valid 6-digit pincode." }, { status: 400 });
   }
   const headers = { "Cache-Control": "public, max-age=86400, s-maxage=604800" };
-  if (mem.has(pin)) {
-    const hit = mem.get(pin);
-    return hit ? NextResponse.json(hit, { headers }) : NextResponse.json({ error: "Pincode not found." }, { status: 404 });
+  const hit = mem.get(pin);
+  if (hit) return NextResponse.json(hit, { headers });
+  if ((missUntil.get(pin) ?? 0) > Date.now()) {
+    return NextResponse.json({ error: "Pincode not found." }, { status: 404 });
   }
   const ref = getAdminDb().collection("pincodes").doc(pin);
   try {
@@ -63,8 +67,11 @@ export async function GET(_req: NextRequest, { params }: { params: { pin: string
   } catch { /* fall through to India Post */ }
   try {
     const info = await fromIndiaPost(pin);
+    if (!info) {
+      missUntil.set(pin, Date.now() + 10 * 60 * 1000);
+      return NextResponse.json({ error: "Pincode not found." }, { status: 404 });
+    }
     mem.set(pin, info);
-    if (!info) return NextResponse.json({ error: "Pincode not found." }, { status: 404 });
     ref.set({ ...info, fetchedAt: new Date().toISOString() }).catch(() => undefined);
     return NextResponse.json(info, { headers });
   } catch (e) {
