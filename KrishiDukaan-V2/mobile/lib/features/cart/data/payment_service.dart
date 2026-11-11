@@ -96,6 +96,8 @@ class PaymentService {
     String? customerPhone,
     Map<String, dynamic>? customerAddress,
     Map<String, double>? deliveryBySeller,
+    /// Delivery pincode: the courier price is quoted to it.
+    String? customerPincode,
   }) async {
     final token = await FirebaseAuth.instance.currentUser?.getIdToken();
     if (token == null) throw Exception('Not authenticated');
@@ -150,6 +152,7 @@ class PaymentService {
         'customerPhone': ?customerPhone,
         'customerAddress': ?customerAddress,
         'deliveryBySeller': ?deliveryBySeller,
+        'customerPincode': ?customerPincode,
       }),
     );
 
@@ -158,6 +161,68 @@ class PaymentService {
     }
 
     return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// The server's exact price for the cart (create-cart-order, quoteOnly):
+  /// the cheaper of Delhivery and Shiprocket per seller parcel to [pincode], or
+  /// the seller's own charge where no courier serves it. Paying afterwards hits
+  /// the server's quote cache, so this equals what will be charged.
+  /// Null when it can't be fetched (the slab estimate is shown instead).
+  Future<CartQuote?> quoteCart({
+    required List<CartItemModel> items,
+    required String pincode,
+    String? customerDeliveryState,
+  }) async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null || items.isEmpty) return null;
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/payment/create-cart-order'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              if (!kIsWeb) 'x-client': 'mobile',
+            },
+            body: jsonEncode({
+              'quoteOnly': true,
+              'items': items.map((i) => {
+                'productId': i.catalogId,
+                'sellerId': i.sellerPhone,
+                'sellerPhone': i.sellerPhone,
+                'qty': i.quantity,
+                if (i.variantLabel != null && i.variantLabel!.isNotEmpty)
+                  'variantUnit': i.variantLabel,
+              }).toList(),
+              'userId': FirebaseAuth.instance.currentUser?.uid,
+              'clientGstAdded': 0,
+              'customerDeliveryState': ?customerDeliveryState,
+              'customerPincode': pincode,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) return null;
+      final body = jsonDecode(response.body);
+      if (body is! Map || body['quoteOnly'] != true) return null;
+      final sellers = body['sellerBreakdown'] is List ? body['sellerBreakdown'] as List : const [];
+      final couriers = <String>[];
+      for (final b in sellers.whereType<Map>()) {
+        final d = b['delivery'];
+        if (d is Map && d['mode'] == 'courier' && d['courier'] is Map) {
+          final c = d['courier'] as Map;
+          final name = c['carrier'] == 'delhivery' ? 'Delhivery ${c['service']}' : 'Shiprocket (${c['service']})';
+          final eta = (c['etaDays'] as num?)?.toInt();
+          couriers.add(eta != null && eta > 0 ? '$name · ~$eta days' : name);
+        }
+      }
+      return CartQuote(
+        delivery: (body['delivery'] as num?)?.toDouble() ?? 0,
+        gstAdded: (body['gstAdded'] as num?)?.toDouble() ?? 0,
+        couriers: couriers,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Confirms whether a Razorpay order actually has a captured payment,
@@ -326,4 +391,14 @@ class PaymentService {
 
     return response.statusCode == 200;
   }
+}
+
+
+/// The server's price for the cart before paying (see [PaymentService.quoteCart]).
+class CartQuote {
+  final double delivery;
+  final double gstAdded;
+  /// One line per seller parcel priced by a courier, e.g. "Delhivery Surface · ~3 days".
+  final List<String> couriers;
+  const CartQuote({required this.delivery, required this.gstAdded, required this.couriers});
 }

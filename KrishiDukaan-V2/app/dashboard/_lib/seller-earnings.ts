@@ -76,6 +76,7 @@ export type OrderLike = {
   /** Razorpay's view of this order's transfer (functions/src/payouts/payout-status.ts). */
   payout?: OrderPayout;
   shipment?: { platformKeptDelivery?: boolean } | null;
+  deliveryBreakdown?: { sellerPaysCourier?: number } | null;
 };
 
 /** One order's transfer as Razorpay last reported it. */
@@ -156,7 +157,10 @@ export function grossFor(order: OrderLike): number {
     : (order.subtotal ?? 0) + (order.deliveryCharge ?? 0) + (order.totalGst ?? 0);
   // The platform paid the courier on this order, so the delivery fee is not the
   // seller's. (functions/src/shipping/engine.ts takes it back from the transfer.)
-  return order.shipment?.platformKeptDelivery ? Math.max(0, total - (order.deliveryCharge ?? 0)) : total;
+  if (!order.shipment?.platformKeptDelivery) return total;
+  // Plus the courier cost the seller bears when every item was Free Delivery.
+  const sellerPays = Math.max(0, Number(order.deliveryBreakdown?.sellerPaysCourier ?? 0));
+  return Math.max(0, total - (order.deliveryCharge ?? 0) - sellerPays);
 }
 
 /** What the seller is actually owed: their share less anything refunded to the

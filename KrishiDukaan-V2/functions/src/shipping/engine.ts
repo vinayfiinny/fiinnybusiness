@@ -250,7 +250,10 @@ async function keepDeliveryFee(orderId: string, cfg: ShippingConfig): Promise<vo
   if (!cfg.platformKeepsDeliveryFee) return;
   await orderRef(orderId).update({ "shipment.platformKeptDelivery": true });
   const o = (await orderRef(orderId).get()).data();
-  const fee = Math.round(Number(o?.deliveryCharge ?? 0) * 100);
+  // The customer's delivery fee, plus the courier cost a seller agreed to bear
+  // by marking every item Free Delivery (lib/cart-pricing courierDelivery).
+  const sellerPays = Number(o?.deliveryBreakdown?.sellerPaysCourier ?? 0);
+  const fee = Math.round((Number(o?.deliveryCharge ?? 0) + (sellerPays > 0 ? sellerPays : 0)) * 100);
   const paymentId = String(o?.payment?.razorpayPaymentId ?? "");
   if (!o || fee <= 0 || !paymentId || o.shipment?.feeReversal) return;
   try {

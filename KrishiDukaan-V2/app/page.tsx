@@ -1489,6 +1489,8 @@ export default function App() {
           customerName:    fullCustomerName(checkoutInfo),
           customerPhone:   checkoutInfo.customerPhone.trim(),
           customerAddress,
+          // The courier price is quoted to this pincode (same as the cart's quote).
+          customerPincode: checkoutInfo.addressPincode.trim(),
         }),
       });
 

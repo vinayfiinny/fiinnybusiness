@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as C from "../../app/lib/cart-pricing";
+import { cheapestOf, dropPincodeFrom, parcelKgFor } from "../../app/lib/courier-quote";
 import { computeLinePricing } from "../../app/utils/gst";
 import { parseVariantWeightKg } from "../../app/utils/weight";
 import { DEFAULT_IN_STATE_SLABS, DEFAULT_OUT_STATE_SLABS } from "../../app/dashboard/_types/delivery-settings";
@@ -405,3 +406,47 @@ t("genuinely different units are NOT treated as equal (5kg != 500g, 1L != 1kg)",
 }
 
 console.log(`\n${n} passed`);
+
+// ─── Courier price at checkout (lib/cart-pricing courierDelivery) ────────────
+{
+  const price = C.computeSellerPricing;
+  const courier = { charge: 269, carrier: "delhivery" as const, service: "Surface", etaDays: 4, weightKg: 5.5 };
+  const slabs = { coverageType: "pan_india", sellerState: "Maharashtra", weightSlabs: [{ minKg: 0, maxKg: 15, charge: 100 }],
+    inStateSlabs: [{ minKg: 0, maxKg: 15, charge: 0 }], outStateSlabs: [{ minKg: 0, maxKg: 15, charge: 100 }] };
+  const line = { sellerKey: "+919000000002", unitPrice: 2300, qty: 1, weightKg: 5, extraDeliveryCharge: 40 };
+
+  // The customer pays the courier price, not the seller's ₹0 in-state slab, and not the per-product extra.
+  const c = price("+919000000002", [line], slabs, "Maharashtra", courier);
+  assert.equal(c.deliveryCharge, 269);
+  assert.equal(c.total, 2300 + 269);
+  assert.equal(c.delivery.mode, "courier");
+  assert.equal(c.delivery.slab + c.delivery.extra, 269); // invoices sum slab + extra
+  assert.equal(c.delivery.sellerPaysCourier, undefined);
+
+  // No courier quote: the seller's own slab, exactly as before.
+  const s = price("+919000000002", [line], slabs, "Telangana", null);
+  assert.equal(s.deliveryCharge, 140);
+  assert.equal(s.delivery.mode, undefined);
+
+  // Seller's Free Delivery on every item: customer pays 0, the seller bears the courier cost.
+  const f = price("+919000000002", [{ ...line, freeDelivery: true }], slabs, "Telangana", courier);
+  assert.equal(f.deliveryCharge, 0);
+  assert.equal(f.delivery.free, true);
+  assert.equal(f.delivery.sellerPaysCourier, 269);
+
+  // A parcel with any paid item: the customer pays the courier price for the parcel.
+  const m = price("+919000000002", [{ ...line, freeDelivery: true }, { ...line, unitPrice: 100 }], slabs, "Telangana", courier);
+  assert.equal(m.deliveryCharge, 269);
+
+  assert.equal(parcelKgFor([{ qty: 1, weightKg: 5 }]), 5.5);      // +10% packing
+  assert.equal(parcelKgFor([{ qty: 1, weightKg: 0.1 }]), 0.5);    // courier minimum
+  assert.equal(parcelKgFor([{ qty: 2, weightKg: 0 }]), 2.5);      // unreadable size: 1 kg/unit → 2.2 → 2.5 band
+  assert.equal(parcelKgFor([{ qty: 1, weightKg: 1 }]), 1.5);      // 1.1 → next 0.5 band
+  assert.equal(dropPincodeFrom("Area, Hyderabad, Hyderabad, Telangana, 500057"), "500057");
+  assert.equal(dropPincodeFrom({ pincode: "411005" }), "411005");
+  assert.equal(dropPincodeFrom("x", "122003"), "122003");
+  assert.equal(dropPincodeFrom("no pin"), "");
+  assert.equal(cheapestOf([{ carrier: "shiprocket", service: "A", cost: 333 }, { carrier: "delhivery", service: "Surface", cost: 269 }])!.carrier, "delhivery");
+  assert.equal(cheapestOf([{ carrier: "delhivery", service: "Surface", cost: 0 }]), null);
+  console.log("courier checkout pricing: all passed");
+}

@@ -5,7 +5,7 @@ import type { CartItem, SellerType } from "../../types/order";
 import { cartItemKey } from "../../types/order";
 import type { MarketplaceProduct } from "../../types/product";
 import type { StoreWithDistance } from "../utils/nearby";
-import { fetchStoreOnlineDelivery } from "../firebase";
+import { auth, fetchStoreOnlineDelivery } from "../firebase";
 import { ICONS } from "../constants";
 import { useI18n } from "../i18n/I18nContext";
 import { HelperIcon } from "../../components/helpers";
@@ -277,6 +277,84 @@ function useDeliveryEstimates(readyItems: CartItem[], customerState: string): De
 
   return { totalCharge, bySellerCharge, bySellerWeight, deliveryType, loading };
 }
+
+// ─── Courier price from the server ────────────────────────────────────────────
+// When signed in with a delivery pincode, the cart asks the server for the
+// exact price it will charge (create-cart-order, quoteOnly): the cheaper of
+// Delhivery and Shiprocket per seller parcel, or the seller's own charge where
+// no courier serves the address. The Pay request then hits the server's quote
+// cache, so the cart total and the amount charged are the same number.
+
+type CourierInfo = { carrier: "delhivery" | "shiprocket"; service: string; etaDays?: number | null };
+type ServerQuote = {
+  delivery: number;
+  /** Per seller: courier details when priced by a courier, null when the seller's charge. */
+  couriers: CourierInfo[];
+  sellerCharged: number;
+};
+
+function useServerDeliveryQuote(readyItems: CartItem[], pincode: string, state: string, enabled: boolean) {
+  const [quote, setQuote] = useState<ServerQuote | null>(null);
+  const [loading, setLoading] = useState(false);
+  const pin = pincode.trim();
+  const depKey = readyItems
+    .map((i) => `${i.sellerPhone || i.sellerId}:${i.productId}:${i.qty}:${i.variantUnit ?? ""}`)
+    .sort()
+    .join("|") + `#${pin}#${state.trim().toLowerCase()}`;
+
+  useEffect(() => {
+    if (!enabled || !readyItems.length || !/^[1-9]\d{5}$/.test(pin)) {
+      setQuote(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) throw new Error("no session");
+        const res = await fetch("/api/payment/create-cart-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({
+            quoteOnly: true,
+            items: readyItems.map((i) => ({
+              productId: i.productId, sellerId: i.sellerId, sellerPhone: i.sellerPhone,
+              qty: i.qty, variantUnit: i.variantUnit,
+            })),
+            userId: auth.currentUser?.uid,
+            clientGstAdded: 0,
+            customerDeliveryState: state.trim(),
+            customerPincode: pin,
+          }),
+        });
+        const body = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (!res.ok || !body?.quoteOnly) { setQuote(null); return; }
+        const sellers = Array.isArray(body.sellerBreakdown) ? body.sellerBreakdown : [];
+        const couriers: CourierInfo[] = sellers
+          .map((b: any) => b?.delivery?.mode === "courier" ? b.delivery.courier : null)
+          .filter(Boolean);
+        setQuote({
+          delivery: Number(body.delivery) || 0,
+          couriers,
+          sellerCharged: sellers.length - couriers.length,
+        });
+      } catch {
+        if (!cancelled) setQuote(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 450);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depKey, enabled]);
+
+  return { quote, loading };
+}
+
+const COURIER_LABEL = { delhivery: "Delhivery", shiprocket: "Shiprocket" } as const;
 
 // ─── Can these items reach this address? ──────────────────────────────────────
 // A manufacturer's product sells online only in its licensed states; a store
@@ -836,11 +914,45 @@ export default function CartView({
   // Uses the finalized delivery-address state so pan-India sellers charge the
   // correct in-state / out-of-state slab, and recalculates when it changes.
   const {
-    totalCharge: deliveryCharge,
+    totalCharge: slabDeliveryCharge,
     bySellerWeight,
     deliveryType,
-    loading: estimatingDelivery,
+    loading: estimatingSlabs,
   } = useDeliveryEstimates(readyItems, addressState);
+  // The server's real price (courier or seller charge) once signed in with a
+  // pincode; until then the seller-slab estimate above.
+  const { quote: serverQuote, loading: quoting } = useServerDeliveryQuote(
+    readyItems, addressPincode, addressState, isLoggedIn,
+  );
+  const deliveryCharge = serverQuote ? serverQuote.delivery : slabDeliveryCharge;
+  const estimatingDelivery = estimatingSlabs || quoting;
+  const courierNote = serverQuote && serverQuote.couriers.length > 0
+    ? serverQuote.couriers
+        .map((c) => `${COURIER_LABEL[c.carrier]}${c.carrier === "shiprocket" ? ` (${c.service})` : ` ${c.service}`}${c.etaDays ? ` · ~${c.etaDays} days` : ""}`)
+        .join(", ")
+    : null;
+
+  // Pincode → city, district, state (app/api/pincode). The customer types only
+  // the area; the rest comes from the pincode, so the state that prices delivery
+  // can't be mistyped.
+  const lastPinRef = useRef<string>("");
+  useEffect(() => {
+    const pin = addressPincode.trim();
+    if (!/^[1-9]\d{5}$/.test(pin) || pin === lastPinRef.current) return;
+    lastPinRef.current = pin;
+    let cancelled = false;
+    fetch(`/api/pincode/${pin}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d?.state) return;
+        if (d.city) onCustomerFieldChange("addressCity", d.city);
+        if (d.district) onCustomerFieldChange("addressDistrict", d.district);
+        onCustomerFieldChange("addressState", d.state);
+      })
+      .catch(() => { /* lookup down: the fields stay editable */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addressPincode]);
   const areaWarnings = useSellAreaWarnings(readyItems, addressState);
   const blockedCount = readyItems.filter((i) => areaWarnings[sellAreaKey(i)]).length;
 
@@ -1165,7 +1277,7 @@ export default function CartView({
                 {estimatingDelivery && (
                   <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 )}
-                {!estimatingDelivery && deliveryType && (
+                {!estimatingDelivery && deliveryType && !courierNote && (
                   <span className="inline-flex items-center rounded-full bg-primary/8 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
                     {deliveryType === "in_state" ? t('cartDeliveryWithinState') : t('cartDeliveryOutsideState')}
                   </span>
@@ -1177,6 +1289,13 @@ export default function CartView({
                   : t('cartDeliveryFree')}
               </span>
             </div>
+          )}
+
+          {/* Which courier the price came from */}
+          {canCheckout && !estimatingDelivery && courierNote && (
+            <p className="text-[10px] text-on-surface-variant -mt-1">
+              Courier: {courierNote}
+            </p>
           )}
 
           {/* Deliver-to state — clarifies which address state drove the charge above */}

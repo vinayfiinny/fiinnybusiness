@@ -18,7 +18,9 @@ import {
   resolveVariant,
   type CartPricingLine,
   type SellerPricing,
+  type CourierCharge,
 } from '../../../lib/cart-pricing';
+import { cheapestQuote, courierCheckoutEnabled, dropPincodeFrom, parcelKgFor, pickupPincodeFor } from '../../../lib/courier-quote';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -123,6 +125,8 @@ export async function POST(request: Request) {
       customerPhone,
       customerAddress,
       deliveryBySeller,
+      customerPincode,
+      quoteOnly,
     } = body as {
       items:             CartItemInput[];
       userId:            string;
@@ -142,6 +146,10 @@ export async function POST(request: Request) {
       customerPhone?:    string;
       customerAddress?:  unknown;
       deliveryBySeller?: Record<string, number>;
+      /** Delivery pincode; the courier price is quoted to it. */
+      customerPincode?: string;
+      /** Price the cart (items, GST, delivery) without creating a payment. */
+      quoteOnly?: boolean;
     };
 
     console.log('[create-cart-order] received:', {
@@ -521,9 +529,35 @@ export async function POST(request: Request) {
       list.push(l);
       linesBySeller.set(l.sellerKey, list);
     }
+    // Courier price per seller parcel (lib/courier-quote): the cheaper of
+    // Delhivery and Shiprocket to this pincode. A seller neither courier serves,
+    // or with no shop pincode, keeps their own slab charge. Only new clients
+    // (which show this price in the cart) are charged it.
+    const courierBySeller = new Map<string, CourierCharge>();
+    const dropPin = dropPincodeFrom(customerAddress, customerPincode);
+    if (clientGstAdded !== undefined && dropPin && (await courierCheckoutEnabled())) {
+      await Promise.all(Array.from(linesBySeller.entries()).map(async ([key, lines]) => {
+        try {
+          const pickup = await pickupPincodeFor(key);
+          if (!pickup) return;
+          const kg = parcelKgFor(lines);
+          const value = lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
+          const q = await cheapestQuote(pickup, dropPin, kg, value);
+          if (q) {
+            courierBySeller.set(key, {
+              charge: Math.ceil(q.cost), carrier: q.carrier, service: q.service,
+              etaDays: q.etaDays ?? null, weightKg: kg,
+            });
+          }
+        } catch (e) {
+          console.warn('[create-cart-order] courier quote failed, seller slab used', key, e);
+        }
+      }));
+    }
     const sellerPricing: SellerPricing[] = Array.from(linesBySeller.entries()).map(
       ([key, lines]) =>
-        computeSellerPricing(key, lines, settingsBySeller.get(key) ?? null, customerDeliveryState),
+        computeSellerPricing(key, lines, settingsBySeller.get(key) ?? null, customerDeliveryState,
+          courierBySeller.get(key) ?? null),
     );
     const serverDeliveryBySeller: Record<string, number> = {};
     const serverGstBySeller: Record<string, number> = {};
@@ -538,6 +572,19 @@ export async function POST(request: Request) {
     console.log('[create-cart-order] serverDelivery:', serverDelivery,
       '| serverGstAdded:', serverGstAdded, '| bySeller:', serverDeliveryBySeller,
       '| state:', customerDeliveryState);
+
+    // The cart's price check: same pricing, no payment created.
+    if (quoteOnly === true) {
+      return NextResponse.json({
+        ok: true,
+        quoteOnly: true,
+        subtotal: serverSubtotal,
+        gstAdded: serverGstAdded,
+        delivery: serverDelivery,
+        total: Math.round((serverSubtotal + serverGstAdded + serverDelivery) * 100) / 100,
+        sellerBreakdown: sellerPricing,
+      });
+    }
 
     console.log('[create-cart-order] serverSubtotal:', serverSubtotal,
       '| clientSubtotal:', clientSubtotal,

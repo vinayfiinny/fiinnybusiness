@@ -128,7 +128,7 @@ const booked = (o: FirebaseFirestore.DocumentData) => !!o.shipment?.stage && o.s
   check("new booking from the new seller", o.shipment?.stage === "booked" && o.shipment?.awb !== firstAwb && o.shipment?.sellerKey === far.slice(-10), o.shipment);
   check("customer charge frozen", o.deliveryCharge === 40 && o.grandTotal === 840);
 
-  console.log("\n4. Far seller over the 50% limit → offer withdrawn, window closed");
+  console.log("\n4. Owner's rule: a far, costly seller is still offered; the platform pays the gap");
   const c = await newOrder({ sellerPhone: near, sellerId: near, grandTotal: 20, subtotal: 20, deliveryCharge: 0 });
   const offer2 = db.collection("sellerOffers").doc(far.slice(-10)).collection("offers").doc(c);
   offers.push(offer2);
@@ -140,9 +140,11 @@ const booked = (o: FirebaseFirestore.DocumentData) => !!o.shipment?.stage && o.s
       expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 864e5),
     },
   });
-  o = await until(c, (x) => x.reassignment?.noViableSeller === true, 30000);
-  check("offer withdrawn as too far", (await offer2.get()).data()?.status === "too_far", (await offer2.get()).data());
-  check("window closed for refund", o.reassignment?.noViableSeller === true, o.reassignment);
+  let priced: FirebaseFirestore.DocumentData | undefined;
+  for (let i = 0; i < 25 && !(priced?.estimatedShipping > 0); i++) { await sleep(1200); priced = (await offer2.get()).data(); }
+  o = (await db.collection("orders").doc(c).get()).data()!;
+  check("offer stays open even though shipping costs more than the order", priced?.status === "open" && priced?.estimatedShipping > 20, priced);
+  check("window not closed (order goes ahead)", o.reassignment?.noViableSeller !== true, o.reassignment);
 
   console.log("\n5. Fallback to the seller");
   const d = await newOrder({ sellerPhone: near, sellerId: near, customerAddress: { address: "Nowhere", city: "X", state: "Maharashtra", pincode: "999999" } });

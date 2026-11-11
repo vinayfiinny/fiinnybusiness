@@ -22,7 +22,9 @@ export interface ShippingConfig {
   carriers: CarrierId[];
   /** On courier orders the platform pays the courier, so it keeps the fee. */
   platformKeepsDeliveryFee: boolean;
-  /** Reassignment: skip a seller whose shipping exceeds this % of order value. 0 = no limit. */
+  /** Reassignment: skip a seller whose shipping exceeds this % of order value. 0 = no limit.
+   *  Owner's rule: the order always goes ahead and the platform pays any extra,
+   *  so the default is no limit. */
   reassignMaxCostPercent: number;
   /** Above this, an e-way bill is needed, so the order is handled by hand. */
   maxDeclaredValue: number;
@@ -40,7 +42,7 @@ export const DEFAULT_CONFIG: ShippingConfig = {
   mode: "simulate",
   carriers: ["delhivery", "shiprocket"],
   platformKeepsDeliveryFee: true,
-  reassignMaxCostPercent: 50,
+  reassignMaxCostPercent: 0,
   maxDeclaredValue: 49999,
   blockedCategories: [],
   minWeightKg: 0.5,

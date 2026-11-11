@@ -209,13 +209,25 @@ class DeliveryBreakdown {
   final double waived;
   final DeliveryType type;
 
+  /// Courier pricing, as the server charged it (lib/cart-pricing courierDelivery):
+  /// mode "courier", the quote, and what the seller bears on an all-free parcel.
+  /// Carried through untouched so the order records exactly what was charged.
+  final Map<String, dynamic> courierFields;
+
   const DeliveryBreakdown({
     required this.slab,
     required this.extra,
     required this.free,
     required this.waived,
     required this.type,
+    this.courierFields = const {},
   });
+
+  bool get isCourier => courierFields['mode'] == 'courier';
+
+  /// The seller's Free Delivery parcel cost they bear (0 when none).
+  double get sellerPaysCourier =>
+      (courierFields['sellerPaysCourier'] as num?)?.toDouble() ?? 0;
 
   double get charge => free ? 0 : round2(slab + extra);
 
@@ -226,6 +238,7 @@ class DeliveryBreakdown {
         'free': free,
         'waived': waived,
         'deliveryType': type.value,
+        ...courierFields,
       };
 
   factory DeliveryBreakdown.fromMap(Map<dynamic, dynamic> m) =>
@@ -235,6 +248,10 @@ class DeliveryBreakdown {
         free: m['free'] == true,
         waived: (m['waived'] as num?)?.toDouble() ?? 0,
         type: DeliveryType.parse(m['deliveryType']),
+        courierFields: {
+          for (final k in const ['mode', 'courier', 'sellerPaysCourier'])
+            if (m[k] != null) k: m[k],
+        },
       );
 }
 

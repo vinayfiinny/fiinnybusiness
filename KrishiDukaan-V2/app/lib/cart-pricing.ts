@@ -55,6 +55,23 @@ export type DeliveryBreakdown = {
   waived: number;
   /** Which slab set applied. "default" = single-slab seller or state unknown. */
   deliveryType: DeliveryType;
+  /** "courier": priced from Delhivery/Shiprocket (lib/courier-quote). Absent = seller's slab. */
+  mode?: "courier" | "seller";
+  /** The courier quote the customer was charged. */
+  courier?: CourierCharge;
+  /** Every item ships free (seller's Free Delivery): the SELLER bears this courier cost. */
+  sellerPaysCourier?: number;
+};
+
+/** A courier price for one seller's parcel, as charged at checkout. */
+export type CourierCharge = {
+  /** Rupees charged to the customer (the quote, rounded up to a whole rupee). */
+  charge: number;
+  carrier: "delhivery" | "shiprocket";
+  service: string;
+  etaDays?: number | null;
+  /** Billable weight band the quote was for. */
+  weightKg: number;
 };
 
 export type SellerPricing = {
@@ -105,12 +122,27 @@ export function computeSellerDelivery(
   return { slab, extra: extraOf(chargeable), free: false, waived: 0, deliveryType };
 }
 
+/**
+ * Delivery when a courier price is known. The courier price replaces the slab
+ * and the per-product extras (it already reflects weight and distance). When
+ * every item is the seller's Free Delivery, the customer pays nothing and the
+ * seller bears the courier cost.
+ */
+export function courierDelivery(lines: CartPricingLine[], courier: CourierCharge, deliveryType: DeliveryType): DeliveryBreakdown {
+  const allFree = lines.length > 0 && lines.every((l) => l.freeDelivery);
+  return allFree
+    ? { slab: 0, extra: 0, free: true, waived: courier.charge, deliveryType, mode: "courier", courier, sellerPaysCourier: courier.charge }
+    : { slab: courier.charge, extra: 0, free: false, waived: 0, deliveryType, mode: "courier", courier };
+}
+
 /** Full per-seller pricing: subtotal, GST and delivery. */
 export function computeSellerPricing(
   sellerKey: string,
   lines: CartPricingLine[],
   settings: DeliverySettingsLike | null,
   customerState: string | null | undefined,
+  /** Courier price for this seller's parcel; null/undefined = seller's own slab. */
+  courier?: CourierCharge | null,
 ): SellerPricing {
   let subtotal = 0;
   let gstTotal = 0;
@@ -127,7 +159,9 @@ export function computeSellerPricing(
     gstTotal += p.gstTotal;
     gstAdded += p.gstAdded;
   }
-  const delivery = computeSellerDelivery(lines, settings, customerState);
+  const delivery = courier
+    ? courierDelivery(lines, courier, settings ? resolveDeliverySlabs(settings, customerState).deliveryType : "default")
+    : computeSellerDelivery(lines, settings, customerState);
   const deliveryCharge = delivery.free ? 0 : r2(delivery.slab + delivery.extra);
   return {
     sellerKey,

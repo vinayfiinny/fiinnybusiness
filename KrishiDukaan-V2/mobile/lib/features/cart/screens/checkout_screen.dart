@@ -64,6 +64,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   late final AppRazorpay _razorpay;
   final _paymentService = PaymentService();
+
+  /// The server's real price for this cart and pincode (courier, or the
+  /// seller's charge where no courier serves it). Null until fetched, or when
+  /// it can't be: the slab estimate is shown then.
+  CartQuote? _quote;
+  bool _quoting = false;
+  String _quoteKey = '';
+  Timer? _quoteTimer;
+  String _lastPin = '';
   final _orderRepo = OrderRepository();
   final _reviewService = AppReviewService();
 
@@ -90,6 +99,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       onError: _onPaymentError,
     );
 
+    _pincodeCtrl.addListener(_onPincodeChanged);
+
     // Pre-fill phone from Firebase Auth
     final user = FirebaseAuth.instance.currentUser;
     if (user?.phoneNumber != null) {
@@ -99,6 +110,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   void dispose() {
+    _quoteTimer?.cancel();
+    _pincodeCtrl.removeListener(_onPincodeChanged);
     _razorpay.clear();
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
@@ -108,6 +121,56 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _pincodeCtrl.dispose();
     _districtCtrl.dispose();
     super.dispose();
+  }
+
+  /// Pincode → city, district and state (GET /api/pincode/{pin}), so the
+  /// customer types only the street/area and the state that prices delivery
+  /// can't be mistyped. Then the cart is re-priced for the new pincode.
+  Future<void> _onPincodeChanged() async {
+    final pin = _pincodeCtrl.text.trim();
+    if (!RegExp(r'^[1-9][0-9]{5}$').hasMatch(pin) || pin == _lastPin) return;
+    _lastPin = pin;
+    try {
+      final res = await http
+          .get(Uri.parse('${AppConfig.apiBaseUrl}/api/pincode/$pin'))
+          .timeout(const Duration(seconds: 8));
+      if (!mounted || res.statusCode != 200 || _pincodeCtrl.text.trim() != pin) return;
+      final d = jsonDecode(res.body) as Map<String, dynamic>;
+      final city = (d['city'] ?? '').toString();
+      final district = (d['district'] ?? '').toString();
+      if (city.isNotEmpty) _cityCtrl.text = city;
+      if (district.isNotEmpty) _districtCtrl.text = district;
+      final st = matchIndianState((d['state'] ?? '').toString());
+      if (st != null) _setState(st);
+    } catch (_) {
+      // Lookup unavailable: the fields stay editable as before.
+    }
+    _scheduleQuote();
+  }
+
+  /// Asks the server for the exact price whenever the cart, pincode or state
+  /// changes (debounced), so the total shown is the total charged.
+  void _scheduleQuote() {
+    final items = ref.read(cartProvider);
+    final pin = _pincodeCtrl.text.trim();
+    final key = '${items.map((i) => '${i.sellerPhone}:${i.catalogId}:${i.quantity}:${i.variantLabel ?? ''}').join('|')}#$pin#${_state ?? ''}';
+    if (key == _quoteKey) return;
+    _quoteKey = key;
+    _quoteTimer?.cancel();
+    if (items.isEmpty || !RegExp(r'^[1-9][0-9]{5}$').hasMatch(pin)) {
+      if (_quote != null || _quoting) setState(() { _quote = null; _quoting = false; });
+      return;
+    }
+    setState(() => _quoting = true);
+    _quoteTimer = Timer(const Duration(milliseconds: 450), () async {
+      final q = await _paymentService.quoteCart(
+        items: items,
+        pincode: pin,
+        customerDeliveryState: _state,
+      );
+      if (!mounted || key != _quoteKey) return;
+      setState(() { _quote = q; _quoting = false; });
+    });
   }
 
   /// Sets the delivery state and lets the whole cart re-price for it.
@@ -226,14 +289,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // Re-priced for the address state chosen NOW (not a stale estimate).
       final delivery = await ref.read(deliveryChargeProvider.future);
       final gstAdded = delivery.gstAdded;
+      // The server's quote (courier price) when we have it — what the screen showed.
+      final shownDelivery = _quote?.delivery ?? delivery.totalCharge;
       final expectedTotal =
-          ref.read(cartTotalProvider) + gstAdded + delivery.totalCharge;
+          ref.read(cartTotalProvider) + gstAdded + shownDelivery;
 
       final result = await _paymentService.createCartOrder(
         items: items,
         userId: user.uid,
-        clientDelivery: delivery.totalCharge,
+        clientDelivery: shownDelivery,
         clientGst: gstAdded,
+        customerPincode: _pincodeCtrl.text.trim(),
         customerDeliveryState: _state,
         // Same values createOrdersAfterPayment writes later — sent now so
         // the server can rebuild the order if that later step never runs.
@@ -497,9 +563,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     // While the delivery estimate loads, the grand total is unknown — the Pay
     // button stays disabled so the shown amount always equals the charge.
-    final estimating = deliveryAsync.isLoading;
+    final estimating = deliveryAsync.isLoading || _quoting;
     final delivery = deliveryAsync.value;
-    final deliveryCharge = delivery?.totalCharge ?? 0.0;
+    final deliveryCharge = _quote?.delivery ?? delivery?.totalCharge ?? 0.0;
+    // Re-price when the cart or state changed since the last quote.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleQuote();
+    });
     final gstAdded = delivery?.gstAdded ?? 0.0;
     // items + GST added on top + delivery: the figure the server will charge.
     final grandTotal = subtotal + deliveryCharge + gstAdded;
@@ -705,12 +775,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                             : 'FREE',
                         valueColor:
                             deliveryCharge == 0 ? AppColors.success : null,
-                        badge: delivery?.slabType == null
+                        badge: (_quote?.couriers.isNotEmpty ?? false) || delivery?.slabType == null
                             ? null
                             : (delivery!.slabType == DeliveryType.inState
                                 ? 'Within-State'
                                 : 'Outside-State'),
                       ),
+                      if (_quote?.couriers.isNotEmpty ?? false)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'Courier: ${_quote!.couriers.join(', ')}',
+                              style: AppTextStyles.caption
+                                  .copyWith(color: Colors.black54),
+                            ),
+                          ),
+                        ),
                       if ((_state ?? '').isNotEmpty)
                         Align(
                           alignment: Alignment.centerLeft,
