@@ -19,7 +19,10 @@ concurrency:
 
 jobs:
   ios:
-    runs-on: macos-14
+    # The signing secrets live only in the main repo; forks would always fail.
+    if: github.repository == 'arjunfiinny/fiinnybusiness'
+    # macos-14 was retired by GitHub on 2 Nov 2026 ("configuration is not supported").
+    runs-on: macos-15
     defaults:
       run:
         working-directory: KrishiDukaan-V2/mobile
@@ -48,7 +51,10 @@ jobs:
           # as of 2026-07-24). Verify in App Store Connect -> TestFlight ->
           # Builds that the current highest build for KrishiDukaan is still
           # below 1001 before relying on this. Computed in bash, not a YAML
-          # expression, since GitHub Actions' ${{ }} syntax has no + operator.
+          # expression, since GitHub Actions' expression syntax has no + operator.
+          # (Never write the literal dollar-brace-brace marker in a comment here:
+          # GitHub parses it even inside run scripts, and an empty one makes the
+          # whole workflow invalid, failing every push on every branch.)
           echo "BUILD_NUMBER=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
 
       - name: Select Xcode 16
@@ -60,6 +66,11 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned to the version the team builds with. Unpinned "stable" picked up
+          # Flutter 3.50 on 12 Nov 2026, which deprecates package:flutter/material.dart
+          # and failed every build on 43 "deprecated" notes. Bump on purpose, together
+          # with the code, after testing locally.
+          flutter-version: 3.47.9
 
       - name: Tool versions
         shell: bash
@@ -79,7 +90,8 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          flutter analyze
+          # Errors and warnings fail the build; style notes (infos) don't.
+          flutter analyze --no-fatal-infos
 
       - name: Clean and enforce iOS 16
         shell: bash

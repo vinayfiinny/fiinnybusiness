@@ -1,3 +1,13 @@
+// Website server memory leak fix — see next-prepare-once.js. No-op outside the
+// deployed Cloud Function. Guarded: if Firebase's config bundling ever falls
+// back to copying this file alone, the helper is missing and the site must
+// still start (just without the fix).
+try {
+  require("./next-prepare-once").applyNextPrepareOnce();
+} catch (err) {
+  console.warn("[next-prepare-once] helper unavailable:", err && err.message);
+}
+
 // One id per build: a millisecond timestamp, so the "new version" prompt
 // (app/components/shared/update-prompt.tsx) can tell newer from older and
 // never asks a tab on the new build to "update" to an old instance that is
@@ -26,7 +36,7 @@ const nextConfig = {
   // Search Console's "Not found (404)" report: the hostname resolves but nothing
   // serves it, so every inbound link or citation using www is lost and the
   // domain's authority is split across two hostnames. The canonical origin is
-  // the apex (app/layout.tsx metadataBase, app/sitemap.ts, app/robots.ts all
+  // the apex (app/layout.tsx metadataBase, app/sitemap.ts, public/robots.txt all
   // agree on it), so this makes the server agree too.
   //
   // permanent:true → 308, which preserves the method and is the correct

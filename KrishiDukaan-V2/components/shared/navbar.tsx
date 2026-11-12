@@ -270,6 +270,23 @@ export function Navbar({
     }
   };
 
+  // Enter / a recent search: show Market results for it. On the home page
+  // (onNavigate + setProductSearch given) switch view directly: pushing
+  // /?view=market&search=… there changes only the address, the page never
+  // re-reads it, so nothing happened. Elsewhere (admin, dashboard) load the page.
+  const openMarketSearch = (raw: string) => {
+    const q = raw.trim();
+    if (!q) return;
+    setShowResults(false);
+    addRecentSearch(q);
+    if (onNavigate && setProductSearch) {
+      updateSearch(q);
+      onNavigate('market');
+    } else {
+      router.push(`/?view=market&search=${encodeURIComponent(q)}`);
+    }
+  };
+
   const navItems = [
     { id: 'home', label: t('home') },
     { id: 'market', label: t('market') },
@@ -295,9 +312,7 @@ export function Navbar({
   const showRecent = showResults && activeSearch.trim().length === 0 && recentSearches.length > 0;
   const pickRecent = (q: string) => {
     updateSearch(q);
-    setShowResults(false);
-    addRecentSearch(q);
-    router.push(`/?view=market&search=${encodeURIComponent(q)}`);
+    openMarketSearch(q);
   };
   const RecentDropdown = () => (
     <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-2xl shadow-ambient border border-surface-container z-[100] overflow-hidden max-h-[70vh] overflow-y-auto">
@@ -468,9 +483,7 @@ export function Navbar({
                 onChange={e => updateSearch(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && activeSearch.trim()) {
-                    setShowResults(false);
-                    addRecentSearch(activeSearch);
-                    router.push(`/?view=market&search=${encodeURIComponent(activeSearch.trim())}`);
+                    openMarketSearch(activeSearch);
                   }
                 }}
                 onFocus={() => setShowResults(true)}
@@ -808,9 +821,7 @@ export function Navbar({
             onChange={e => updateSearch(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && activeSearch.trim()) {
-                setShowResults(false);
-                addRecentSearch(activeSearch);
-                router.push(`/?view=market&search=${encodeURIComponent(activeSearch.trim())}`);
+                openMarketSearch(activeSearch);
               }
             }}
             onFocus={() => setShowResults(true)}

@@ -1,0 +1,30 @@
+# Served as a static Firebase Hosting file on purpose. It used to come from
+# app/robots.ts, but every /robots.txt request routed to the SSR Cloud Function
+# got an empty 404 from the function runtime itself (Next never ran), so
+# crawlers saw no robots.txt and no sitemap link. Hosting serves public/ files
+# from the CDN before the function rewrite, so this file always answers.
+#
+# Same policy for every crawler, including the AI search bots (GPTBot,
+# ChatGPT-User, PerplexityBot, ClaudeBot, Google-Extended, CCBot): they all
+# fall under "*". Keep the sitemap URL in sync with app/sitemap.ts.
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /dashboard
+Disallow: /api/
+Disallow: /?view=cart
+Disallow: /?view=profile
+Disallow: /?view=orders
+Disallow: /?view=login
+Disallow: /?view=signup
+Disallow: /?view=subscription
+Disallow: /*?*view=cart
+Disallow: /*?*view=profile
+Disallow: /*?*view=orders
+Disallow: /*?*view=login
+Disallow: /*?*view=signup
+Disallow: /*?*view=subscription
+
+Sitemap: https://krishidukan.com/sitemap.xml

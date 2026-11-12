@@ -459,6 +459,10 @@ export default function App() {
 
     const route = readRouteFromUrl();
     const routeView = resolveViewForAccess(route.view);
+    // /?view=market&search=… (search box on another page, a shared link):
+    // open Market already searching for it.
+    const initSearch = new URLSearchParams(window.location.search).get('search')?.trim();
+    if (initSearch) setProductSearch(initSearch.slice(0, 100));
     setSignupInviteCode(route.inviteCode);
     setCurrentView(routeView);
     setSelectedProductId(route.productId);

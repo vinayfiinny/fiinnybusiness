@@ -27,15 +27,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'krishidukan-e8315.firebasestorage.app',
   );
 
-  static const FirebaseOptions _iosProd = FirebaseOptions(
-    apiKey: 'AIzaSyCBXeLPoQA-ajsdsxgvjXD_kRpVtrRDyic',
-    appId: '1:650303885415:ios:4ba023025354cd4b2b84c2',
-    messagingSenderId: '650303885415',
-    projectId: 'krishidukan-e8315',
-    storageBucket: 'krishidukan-e8315.firebasestorage.app',
-    iosBundleId: 'com.karanarjuntechnologies.KrishiDukan',
-  );
-
   static const FirebaseOptions _webProd = FirebaseOptions(
     apiKey: 'AIzaSyDh_Y67TDJc2KLLJ8Wcc2JvEeHzmfVL778',
     appId: '1:650303885415:web:7db7619260aa478b2b84c2',

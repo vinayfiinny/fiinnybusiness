@@ -21,7 +21,7 @@ import {
 import { HELP_SECTIONS } from "./views/helpContent";
 import { TERMS_VERSION } from "./lib/legal-constants";
 
-// Canonical public origin (kept in sync with app/layout.tsx and app/robots.ts).
+// Canonical public origin (kept in sync with app/layout.tsx and public/robots.txt).
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://krishidukan.com";
 

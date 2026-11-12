@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -112,6 +112,14 @@ export default async function ProductPage({ params }: PageProps) {
   const { slug } = await params;
   const product = await getProductById(extractIdFromSlug(slug));
   if (!product) notFound();
+
+  // One URL per product. Legacy single-hyphen slugs and renamed products used to
+  // render a duplicate page with a canonical tag (Search Console's "Alternative
+  // page with proper canonical tag"); a 308 consolidates them onto the real URL.
+  const canonicalSlug = buildProductSlug(product.name, product.id);
+  if (decodeURIComponent(slug) !== canonicalSlug) {
+    permanentRedirect(`/products/${canonicalSlug}`);
+  }
 
   const rows = specRows(product);
   const price = priceValue(product);

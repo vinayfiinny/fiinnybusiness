@@ -30,12 +30,14 @@ jobs:
         env:
           VITE_RECAPTCHA_KEY: ${{ secrets.VITE_RECAPTCHA_KEY }}
 
+      # Deploys only from the main repo: FIREBASE_TOKEN exists only there, so a
+      # fork's push to main always failed at this step.
       - name: Install Firebase CLI
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.repository == 'arjunfiinny/fiinnybusiness' && github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: npm install -g firebase-tools
 
       - name: Deploy to Firebase (Hosting + Rules + Functions)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.repository == 'arjunfiinny/fiinnybusiness' && github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: firebase deploy --only hosting,firestore:rules,functions --token "$FIREBASE_TOKEN" --project karanarjun-pvt-ltd
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

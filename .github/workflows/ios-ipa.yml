@@ -19,7 +19,8 @@ concurrency:
 
 jobs:
   ios:
-    runs-on: macos-14
+    # macos-14 was retired by GitHub on 2 Nov 2026 ("configuration is not supported").
+    runs-on: macos-15
     env:
       CI: "true"
       # Required secrets

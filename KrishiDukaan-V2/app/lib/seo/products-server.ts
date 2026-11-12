@@ -194,16 +194,25 @@ export function buildProductSlug(name: string, id: string): string {
   return base ? `${base}--${id}` : id;
 }
 
+// The only hyphenated doc ids are the KaranArjun catalogue imports, all of the
+// form "karanarjun-<name>-<pack>" (35 listable products as of 2026-10-25).
+const LEGACY_HYPHENATED_ID_PREFIX = "karanarjun-";
+
 /** Extract the Firestore doc id from a product slug.
  *  New format:    `{kebab-name}--{docId}`  → split on first "--"
- *  Legacy format: `{kebab-name}-{docId}`   → lastIndexOf("-") fallback
+ *  Legacy format: `{kebab-name}-{docId}`   → the "karanarjun-…" id if present,
+ *                                            else the last hyphen segment
  *  Bare id (no name prefix):               → returned as-is
  */
 export function extractIdFromSlug(slug: string): string {
   const decoded = decodeURIComponent(slug).trim();
   const sep = decoded.indexOf("--");
   if (sep !== -1) return decoded.slice(sep + 2);
-  // Legacy: single-hyphen format — only correct for IDs that contain no hyphens.
+  // Legacy single-hyphen URLs of hyphenated ids, e.g.
+  // "builder-karanarjun-builder-3000-ml": the last-segment rule below would
+  // look up "ml" and 404 a live product, so take the id from its prefix.
+  const legacy = decoded.lastIndexOf(LEGACY_HYPHENATED_ID_PREFIX);
+  if (legacy !== -1) return decoded.slice(legacy);
   const idx = decoded.lastIndexOf("-");
   return idx === -1 ? decoded : decoded.slice(idx + 1);
 }

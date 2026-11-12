@@ -29,6 +29,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned to the version the team builds with. Unpinned "stable" picked up
+          # Flutter 3.50 on 12 Nov 2026, which deprecates package:flutter/material.dart
+          # and failed every build on 43 "deprecated" notes. Bump on purpose, together
+          # with the code, after testing locally.
+          flutter-version: 3.47.9
           cache: true
 
       # Optional secrets. Without them you get a local-only (no cloud) APK.
