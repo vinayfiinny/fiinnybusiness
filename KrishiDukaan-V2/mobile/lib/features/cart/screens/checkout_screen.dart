@@ -747,20 +747,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         Icons.place_outlined,
                         textCapitalization: TextCapitalization.sentences),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _field(_cityCtrl, 'Town / City *', Icons.location_city,
-                              textCapitalization: TextCapitalization.words,
-                              validator: _required),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _field(_districtCtrl, 'District', Icons.map_outlined,
-                              textCapitalization: TextCapitalization.words),
-                        ),
-                      ],
-                    ),
+                    // One Town / City box. The district comes from the
+                    // pincode and is kept with the order, but not shown:
+                    // India Post's district is also the city.
+                    _field(_cityCtrl, 'Town / City *', Icons.location_city,
+                        textCapitalization: TextCapitalization.words,
+                        validator: _required),
                     const SizedBox(height: 12),
                     // A dropdown, not free text: the state decides the
                     // delivery charge, so it must be a recognised name.

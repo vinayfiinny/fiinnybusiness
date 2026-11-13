@@ -1338,7 +1338,10 @@ export default function App() {
     checkoutInfo.addressArea,
     checkoutInfo.addressLandmark.trim() ? `Near ${checkoutInfo.addressLandmark.trim()}` : "",
     checkoutInfo.addressCity,
-    checkoutInfo.addressDistrict,
+    // Usually the same as the city (India Post): don't print it twice.
+    checkoutInfo.addressDistrict.trim().toLowerCase() === checkoutInfo.addressCity.trim().toLowerCase()
+      ? ""
+      : checkoutInfo.addressDistrict,
     checkoutInfo.addressState,
     checkoutInfo.addressPincode,
   ].filter(Boolean).join(", ");

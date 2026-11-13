@@ -1478,23 +1478,17 @@ export default function CartView({
                 maxLength={80}
                 className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
               />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  value={addressCity}
-                  onChange={(e) => onCustomerFieldChange("addressCity", e.target.value)}
-                  placeholder={`${t('cartAddrCity')} *`}
-                  aria-label={t('cartAddrCity')}
-                  autoComplete="address-level2"
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm min-w-0"
-                />
-                <input
-                  value={addressDistrict}
-                  onChange={(e) => onCustomerFieldChange("addressDistrict", e.target.value)}
-                  placeholder={t('cartDistrict')}
-                  aria-label={t('cartDistrict')}
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm min-w-0"
-                />
-              </div>
+              {/* One Town / City box. The district comes from the pincode and is
+                  kept with the order, but not shown: India Post's district is
+                  also the city, so a second box only repeated it. */}
+              <input
+                value={addressCity}
+                onChange={(e) => onCustomerFieldChange("addressCity", e.target.value)}
+                placeholder={`${t('cartAddrCity')} *`}
+                aria-label={t('cartAddrCity')}
+                autoComplete="address-level2"
+                className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
+              />
               <select
                 value={addressState}
                 onChange={(e) => onCustomerFieldChange("addressState", e.target.value)}
