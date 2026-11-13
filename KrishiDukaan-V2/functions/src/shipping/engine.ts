@@ -9,7 +9,7 @@ import {
   type ActiveShipment, type Pickup,
 } from "./carriers";
 import {
-  SELF_REASON_TEXT, canCancelAt, courierBlocker, hasLeftSeller, needsAttentionFor, orderStatusFor,
+  SELF_REASON_TEXT, canCancelAt, courierBlocker, shouldSimulate, hasLeftSeller, needsAttentionFor, orderStatusFor,
   parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shouldApply,
   validPin, withinReassignCap,
   type OrderItemLike, type Quote, type SelfReason, type ShippingConfig, type Stage,
@@ -167,7 +167,8 @@ export async function bookForOrder(orderId: string): Promise<void> {
     return fallBackToSelf(orderId, o, errors.length === cfg.carriers.length ? "booking_failed" : "not_serviceable", [], errors);
   }
 
-  const simulate = cfg.mode !== "live";
+  // Real booking only in live mode and, if liveSellers is set, only for those sellers.
+  const simulate = shouldSimulate(cfg, o.sellerPhone ?? o.sellerId);
   const reference = `${orderId}-${attempt}`;
   const failures: string[] = [...errors];
   for (const quote of ranked) {

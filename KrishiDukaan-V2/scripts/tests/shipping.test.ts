@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_CONFIG as C, canCancelAt, courierBlocker, delhiveryStage, nextPickupDate, orderStatusFor, packKg,
   parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shiprocketStage, shouldApply,
-  withinReassignCap, type Quote,
+  withinReassignCap, shouldSimulate, type Quote,
 } from "../../functions/src/shipping/pure";
 
 // A config that isn't there, or is mistyped, must never mean live or on.
@@ -15,6 +15,15 @@ assert.equal(parseConfig(undefined).enabled, false);
 assert.equal(parseConfig({ enabled: "true" }).enabled, false);
 assert.equal(parseConfig({ enabled: true, mode: "LIVE" }).mode, "simulate");
 assert.equal(parseConfig({ mode: "live" }).mode, "live");
+
+// Live mode can be limited to named sellers, so a normal test order never books for real
+assert.equal(shouldSimulate(parseConfig({ mode: "simulate", liveSellers: ["9011842378"] }), "+919011842378"), true);
+assert.equal(shouldSimulate(parseConfig({ mode: "live" }), "+919011842378"), false);                          // no list: everyone real
+assert.equal(shouldSimulate(parseConfig({ mode: "live", liveSellers: ["+91 90118 42378"] }), "+919011842378"), false);
+assert.equal(shouldSimulate(parseConfig({ mode: "live", liveSellers: ["9011842378"] }), "+918899556633"), true); // not listed: simulated
+assert.equal(shouldSimulate(parseConfig({ mode: "live", liveSellers: ["9011842378"] }), undefined), true);
+assert.equal(shouldSimulate(parseConfig({ mode: "LIVE", liveSellers: ["9011842378"] }), "+919011842378"), true);  // exact word only
+assert.deepEqual(parseConfig({ liveSellers: ["123", "x", "9011842378"] }).liveSellers, ["9011842378"]);
 
 // Weight
 assert.equal(packKg("500 ml"), 0.5);

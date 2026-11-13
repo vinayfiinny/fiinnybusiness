@@ -20,6 +20,12 @@ export interface ShippingConfig {
   /** simulate = real price quotes, invented bookings. live = real shipments. */
   mode: "simulate" | "live";
   carriers: CarrierId[];
+  /**
+   * With mode "live": only these sellers (10-digit phones) get REAL bookings;
+   * every other seller is simulated, so an ordinary test order can't create a
+   * real shipment. Empty = every seller (production). Ignored in simulate mode.
+   */
+  liveSellers: string[];
   /** On courier orders the platform pays the courier, so it keeps the fee. */
   platformKeepsDeliveryFee: boolean;
   /** Reassignment: skip a seller whose shipping exceeds this % of order value. 0 = no limit.
@@ -41,6 +47,7 @@ export const DEFAULT_CONFIG: ShippingConfig = {
   enabled: false,
   mode: "simulate",
   carriers: ["delhivery", "shiprocket"],
+  liveSellers: [],
   platformKeepsDeliveryFee: true,
   reassignMaxCostPercent: 0,
   maxDeclaredValue: 49999,
@@ -65,6 +72,9 @@ export function parseConfig(raw: unknown): ShippingConfig {
     // Only the exact word turns on real bookings; anything else stays simulated.
     mode: d.mode === "live" ? "live" : "simulate",
     carriers,
+    liveSellers: Array.isArray(d.liveSellers)
+      ? d.liveSellers.map((p) => String(p).replace(/\D/g, "").slice(-10)).filter((p) => p.length === 10)
+      : [],
     platformKeepsDeliveryFee: d.platformKeepsDeliveryFee !== false,
     reassignMaxCostPercent: num(d.reassignMaxCostPercent, DEFAULT_CONFIG.reassignMaxCostPercent),
     maxDeclaredValue: num(d.maxDeclaredValue, DEFAULT_CONFIG.maxDeclaredValue),
@@ -187,6 +197,14 @@ export function rankQuotes(quotes: Quote[]): Quote[] {
       (a.etaDays ?? 99) - (b.etaDays ?? 99) ||
       a.carrier.localeCompare(b.carrier) ||
       a.service.localeCompare(b.service));
+}
+
+/** Real booking or simulated, for this seller. Anything but exact "live" simulates. */
+export function shouldSimulate(cfg: Pick<ShippingConfig, "mode" | "liveSellers">, sellerPhone: unknown): boolean {
+  if (cfg.mode !== "live") return true;
+  if (cfg.liveSellers.length === 0) return false;
+  const key = String(sellerPhone ?? "").replace(/\D/g, "").slice(-10);
+  return !cfg.liveSellers.includes(key);
 }
 
 /** Reasons an order can never go by courier, before asking for any price. */
