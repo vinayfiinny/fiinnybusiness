@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {  Box, LayoutDashboard, Layers, Users, X, Mail, MessageSquare, Building2, BarChart3, CreditCard, BookOpen, Tag, Package, MessageCircle, Video, UserCog, ShoppingCart, IndianRupee, Banknote, ReceiptText, ShieldAlert, Contact, GalleryHorizontal, Link2, Search, ChevronDown, Smartphone, Info, SearchCheck , HeadphonesIcon, HelpCircle  } from "lucide-react";
+import {  Box, LayoutDashboard, Layers, Users, X, Mail, MessageSquare, Building2, BarChart3, CreditCard, BookOpen, Tag, Package, MessageCircle, Video, UserCog, ShoppingCart, IndianRupee, Banknote, ReceiptText, ShieldAlert, Contact, GalleryHorizontal, Link2, Search, ChevronDown, Smartphone, Info, SearchCheck , HeadphonesIcon, HelpCircle, Truck  } from "lucide-react";
 import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
 import { cn } from "../../dashboard/_lib/cn";
 import { db } from "../../firebase";
@@ -30,6 +30,7 @@ const navGroups: NavGroup[] = [
     label: "Orders & money",
     items: [
       { href: "/admin/orders", label: "Orders", icon: ShoppingCart, sections: ["orders"] },
+      { href: "/admin/courier", label: "Courier delivery", icon: Truck, sections: ["orders"], keywords: "delhivery shiprocket shipping automation" },
       { href: "/admin/payments", label: "Customer payments", icon: ReceiptText, sections: ["payments"], keywords: "razorpay failed attempts" },
       {
         href: "/admin/payouts",

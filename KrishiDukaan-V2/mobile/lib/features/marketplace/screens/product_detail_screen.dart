@@ -34,6 +34,7 @@ import '../../../core/widgets/expandable_text.dart';
 import '../providers/marketplace_provider.dart';
 import '../widgets/review_sheet.dart';
 import '../widgets/store_selector_sheet.dart';
+import '../widgets/delivery_estimate.dart';
 import '../../reels/providers/reels_provider.dart';
 import '../../reels/screens/shop_profile_screen.dart';
 import '../../../core/providers/user_provider.dart';
@@ -259,6 +260,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       _buildVariantSelector(variants, selectedVariant)
                     else if (_singleSizeOf(catalog) != null)
                       _buildSingleSize(_singleSizeOf(catalog)!),
+
+                    // ── Deliver to <pincode>: courier price + date for
+                    //    the store an order would go to. ─────────────────────
+                    Builder(builder: (context) {
+                      final options = listingsAsync.maybeWhen(
+                        data: (raw) => buildStoreOptions(catalog, raw,
+                            selectedVariant: _selectedVariantOf(catalog)),
+                        orElse: () => null,
+                      );
+                      if (options == null || options.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return DeliveryEstimateBox(
+                        productId: catalog.id,
+                        sellerPhone: options.first.listing.sellerPhone,
+                        size: _selectedVariantLabel(catalog),
+                        profilePincode:
+                            ref.watch(currentUserProvider).value?.pincode,
+                      );
+                    }),
 
                     const Divider(height: 1, thickness: 1),
 

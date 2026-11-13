@@ -163,7 +163,9 @@ SellerEarnings earningsFromStats(
 double _grossFor(OrderModel order) {
   if (order.shipment?.platformKeptDelivery != true) return order.total;
   // Plus the courier cost the seller bears when every item was Free Delivery.
-  final sellerPays = order.deliveryBreakdown?.sellerPaysCourier ?? 0;
+  final sellerPays = order.shipment?.sellerPaysCourier ??
+      order.deliveryBreakdown?.sellerPaysCourier ??
+      0;
   final value = order.total - order.deliveryCharge - (sellerPays > 0 ? sellerPays : 0);
   return value > 0 ? value : 0;
 }

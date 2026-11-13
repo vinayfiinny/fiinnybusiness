@@ -42,6 +42,7 @@ export function sectionsForPath(pathname: string): AdminSection[] {
   if (seg === "app-version") return ["appVersion"];
   if (seg === "about-page") return ["aboutPage"];
   if (seg === "search-insights" || seg === "search-links") return ["analytics"];
+  if (seg === "courier") return ["orders"];
   return (ADMIN_SECTIONS as readonly string[]).includes(seg) ? [seg as AdminSection] : ["overview"];
 }
 

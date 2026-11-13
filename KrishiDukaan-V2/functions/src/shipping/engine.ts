@@ -10,7 +10,7 @@ import {
 } from "./carriers";
 import {
   SELF_REASON_TEXT, canCancelAt, courierBlocker, shouldSimulate, hasLeftSeller, needsAttentionFor, orderStatusFor,
-  parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shouldApply,
+  orderDropPlace, parcelKg, parseConfig, rankQuotes, readSellerPlace, sellerCourierShare, shouldApply,
   validPin, withinReassignCap,
   type OrderItemLike, type Quote, type SelfReason, type ShippingConfig, type Stage,
 } from "./pure";
@@ -132,9 +132,24 @@ async function fallBackToSelf(orderId: string, o: FirebaseFirestore.DocumentData
   logger.info("[shipping] self delivery", { orderId, reason });
 }
 
+/**
+ * Courier automation was switched off (admin → Courier delivery) while an order
+ * sat in "booking": hand it to the seller rather than leave it stuck.
+ */
+export async function releaseStuckBooking(orderId: string): Promise<void> {
+  const snap = await orderRef(orderId).get();
+  const o = snap.data();
+  if (!o || o.shipment?.stage !== "booking") return;
+  // A booking still in flight (lock fresh) finishes on its own.
+  if (Date.now() - Date.parse(String(o.shipment?.lockedAt ?? 0)) <= LOCK_STALE_MS) return;
+  await fallBackToSelf(orderId, o, "automation_off", [], []);
+}
+
 /** Cheapest courier that actually accepts the booking; seller delivers if none do. */
 export async function bookForOrder(orderId: string): Promise<void> {
   const cfg = await loadConfig();
+  // Off: sellers deliver themselves, as before courier automation. Orders get
+  // no shipment at all, so every screen shows the manual flow.
   if (!cfg.enabled) return;
 
   // A shipment left from a previous seller goes first (reassignment accepted
@@ -151,7 +166,7 @@ export async function bookForOrder(orderId: string): Promise<void> {
 
   const items = itemsOf(o);
   const value = orderValue(o);
-  const drop = parseCustomerAddress(o.customerAddress, o.customerDeliveryState);
+  const drop = orderDropPlace(o);
   const pickup = await resolvePickup(String(o.sellerPhone ?? o.sellerId ?? ""));
   const blocker = courierBlocker({
     pickupPin: pickup?.pincode ?? "", dropPin: drop.pincode, declaredValue: value,
@@ -189,6 +204,8 @@ export async function bookForOrder(orderId: string): Promise<void> {
           reference, sellerKey: key10(o.sellerPhone ?? o.sellerId),
           weightKg: kg, weightGuessed: guessed, cost: quote.cost, etaDays: quote.etaDays ?? null,
           customerPaid, platformGap: Math.round((quote.cost - customerPaid) * 100) / 100,
+          // Free Delivery: the part of the courier cost taken from the seller's payout.
+          sellerPaysCourier: sellerCourierShare(o, quote.cost),
           quotes: ranked.slice(0, 8), errors: failures,
           needsAttention: false, bookedAt: at,
           events: [{ stage: "booked", at, source: "system" }],
@@ -252,8 +269,9 @@ async function keepDeliveryFee(orderId: string, cfg: ShippingConfig): Promise<vo
   await orderRef(orderId).update({ "shipment.platformKeptDelivery": true });
   const o = (await orderRef(orderId).get()).data();
   // The customer's delivery fee, plus the courier cost a seller agreed to bear
-  // by marking every item Free Delivery (lib/cart-pricing courierDelivery).
-  const sellerPays = Number(o?.deliveryBreakdown?.sellerPaysCourier ?? 0);
+  // by offering Free Delivery — recorded on the shipment at booking, capped at
+  // what the courier charged (pure.ts sellerCourierShare).
+  const sellerPays = Number(o?.shipment?.sellerPaysCourier ?? sellerCourierShare(o ?? {}, o?.shipment?.cost));
   const fee = Math.round((Number(o?.deliveryCharge ?? 0) + (sellerPays > 0 ? sellerPays : 0)) * 100);
   const paymentId = String(o?.payment?.razorpayPaymentId ?? "");
   if (!o || fee <= 0 || !paymentId || o.shipment?.feeReversal) return;
@@ -413,7 +431,7 @@ export async function priceReassignmentOffers(orderId: string): Promise<void> {
   const o = (await orderRef(orderId).get()).data();
   const candidates = (o?.reassignment?.candidatePhones ?? []) as string[];
   if (!o || candidates.length === 0) return;
-  const drop = parseCustomerAddress(o.customerAddress, o.customerDeliveryState);
+  const drop = orderDropPlace(o);
   const { kg } = parcelKg(itemsOf(o), cfg);
   const value = orderValue(o);
 

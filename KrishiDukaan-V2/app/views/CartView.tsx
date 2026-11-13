@@ -15,8 +15,10 @@ import { resolveVariant } from "../lib/cart-pricing";
 import { parseVariantWeightKg } from "../utils/weight";
 import { computeLinePricing } from "../utils/gst";
 import { resolveDeliverySlabs, chargeFromSlabs, type DeliveryType } from "../utils/delivery";
+import { formatDeliveryDate } from "../lib/delivery-eta";
+import { INDIAN_STATES } from "../dashboard/_types/delivery-settings";
 
-type AddressField = "customerFirstName" | "customerLastName" | "customerPhone" | "addressArea" | "addressCity" | "addressDistrict" | "addressState" | "addressPincode";
+type AddressField = "customerFirstName" | "customerLastName" | "customerPhone" | "addressHouse" | "addressArea" | "addressLandmark" | "addressCity" | "addressDistrict" | "addressState" | "addressPincode";
 
 type CartViewProps = {
   items: CartItem[];
@@ -25,7 +27,10 @@ type CartViewProps = {
   customerFirstName: string;
   customerLastName: string;
   customerPhone: string;
+  /** Flat, house no., building, company, apartment. */
+  addressHouse: string;
   addressArea: string;
+  addressLandmark: string;
   addressCity: string;
   addressDistrict: string;
   addressState: string;
@@ -285,7 +290,7 @@ function useDeliveryEstimates(readyItems: CartItem[], customerState: string): De
 // no courier serves the address. The Pay request then hits the server's quote
 // cache, so the cart total and the amount charged are the same number.
 
-type CourierInfo = { carrier: "delhivery" | "shiprocket"; service: string; etaDays?: number | null };
+type CourierInfo = { carrier: "delhivery" | "shiprocket"; service: string; etaDays?: number | null; deliveryBy?: string | null };
 type ServerQuote = {
   delivery: number;
   /** Per seller: courier details when priced by a courier, null when the seller's charge. */
@@ -876,7 +881,9 @@ export default function CartView({
   customerFirstName,
   customerLastName,
   customerPhone,
+  addressHouse,
   addressArea,
+  addressLandmark,
   addressCity,
   addressDistrict,
   addressState,
@@ -930,6 +937,12 @@ export default function CartView({
     ? serverQuote.couriers
         .map((c) => `${COURIER_LABEL[c.carrier]}${c.carrier === "shiprocket" ? ` (${c.service})` : ` ${c.service}`}${c.etaDays ? ` · ~${c.etaDays} days` : ""}`)
         .join(", ")
+    : null;
+  // "Delivery by Thu, 19 Nov": the latest seller parcel decides (lib/delivery-eta).
+  // Only when every seller ships by courier; a seller's own delivery has no date.
+  const deliveryByIso = serverQuote && serverQuote.couriers.length > 0 && serverQuote.sellerCharged === 0
+    && serverQuote.couriers.every((c) => !!c.deliveryBy)
+    ? serverQuote.couriers.map((c) => c.deliveryBy as string).sort().at(-1) ?? null
     : null;
 
   // Pincode → city, district, state (app/api/pincode). The customer types only
@@ -1291,6 +1304,13 @@ export default function CartView({
             </div>
           )}
 
+          {/* Estimated delivery date */}
+          {canCheckout && !estimatingDelivery && deliveryByIso && (
+            <p className="text-xs font-semibold text-green-700 -mt-1">
+              Delivery by {formatDeliveryDate(deliveryByIso)}
+            </p>
+          )}
+
           {/* Which courier the price came from */}
           {canCheckout && !estimatingDelivery && courierNote && (
             <p className="text-[10px] text-on-surface-variant -mt-1">
@@ -1419,47 +1439,79 @@ export default function CartView({
               {locationError && (
                 <p className="text-[11px] font-semibold text-amber-700 -mt-0.5">{locationError}</p>
               )}
+              {/* Amazon-style order: pincode first (it fills town, district and
+                  state), then the house, the area, a landmark, town and state. */}
+              <input
+                value={addressPincode}
+                onChange={(e) => onCustomerFieldChange("addressPincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder={`${t('cartPincode')} *`}
+                aria-label={t('cartPincode')}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                maxLength={6}
+                className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
+              />
+              <input
+                value={addressHouse}
+                onChange={(e) => onCustomerFieldChange("addressHouse", e.target.value)}
+                placeholder={`${t('cartAddrHouse')} *`}
+                aria-label={t('cartAddrHouse')}
+                autoComplete="address-line1"
+                maxLength={120}
+                className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
+              />
               <input
                 ref={addressInputRef}
                 value={addressArea}
                 onChange={(e) => { onCustomerFieldChange("addressArea", e.target.value); setLocationError(null); }}
-                placeholder={t('cartAreaLocality')}
+                placeholder={`${t('cartAddrArea')} *`}
+                aria-label={t('cartAddrArea')}
                 autoComplete="off"
+                maxLength={160}
+                className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
+              />
+              <input
+                value={addressLandmark}
+                onChange={(e) => onCustomerFieldChange("addressLandmark", e.target.value)}
+                placeholder={t('cartAddrLandmark')}
+                aria-label={t('cartAddrLandmark')}
+                maxLength={80}
                 className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
               />
               <div className="grid grid-cols-2 gap-2">
                 <input
                   value={addressCity}
                   onChange={(e) => onCustomerFieldChange("addressCity", e.target.value)}
-                  placeholder={t('cartCity')}
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm"
+                  placeholder={`${t('cartAddrCity')} *`}
+                  aria-label={t('cartAddrCity')}
+                  autoComplete="address-level2"
+                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm min-w-0"
                 />
                 <input
                   value={addressDistrict}
                   onChange={(e) => onCustomerFieldChange("addressDistrict", e.target.value)}
                   placeholder={t('cartDistrict')}
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm"
+                  aria-label={t('cartDistrict')}
+                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm min-w-0"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  value={addressState}
-                  onChange={(e) => onCustomerFieldChange("addressState", e.target.value)}
-                  placeholder={t('cartState')}
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm"
-                />
-                <input
-                  value={addressPincode}
-                  onChange={(e) => onCustomerFieldChange("addressPincode", e.target.value)}
-                  placeholder={t('cartPincode')}
-                  type="number"
-                  maxLength={6}
-                  className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm"
-                />
-              </div>
+              <select
+                value={addressState}
+                onChange={(e) => onCustomerFieldChange("addressState", e.target.value)}
+                aria-label={t('cartState')}
+                className="rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-sm w-full"
+              >
+                <option value="">{`${t('cartAddrStateSelect')} *`}</option>
+                {addressState && !INDIAN_STATES.includes(addressState) && (
+                  <option value={addressState}>{addressState}</option>
+                )}
+                {INDIAN_STATES.map((st) => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
 
               {/* Save address checkbox */}
-              {onSaveAddress && (addressArea.trim() || addressCity.trim() || addressDistrict.trim() || addressState.trim() || addressPincode.trim()) && (
+              {onSaveAddress && (addressHouse.trim() || addressArea.trim() || addressCity.trim() || addressDistrict.trim() || addressState.trim() || addressPincode.trim()) && (
                 <label className="flex items-center gap-2 mt-2 px-1 cursor-pointer group">
                   <input
                     type="checkbox"

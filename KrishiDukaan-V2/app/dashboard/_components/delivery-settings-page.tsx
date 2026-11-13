@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useEffectiveUser } from "../_context/effective-user-context";
 import {
-  Globe, MapPin, Weight, Plus, Trash2, Save,
+  Globe, MapPin, Weight, Plus, Trash2, Save, Truck,
   Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, Info, Lock,
 } from "lucide-react";
 import Link from "next/link";
@@ -380,6 +380,8 @@ export function DeliverySettingsPage() {
   // is set per product by its licence (Inventory → Edit → Selling licence),
   // so they always use the pan-India within/outside-state slabs.
   const [isManufacturer, setIsManufacturer] = useState(false);
+  const [freeDelivery, setFreeDelivery] = useState(false);
+  const [networkFreeDelivery, setNetworkFreeDelivery] = useState(false);
   const [coverageType, setCoverageType] = useState<CoverageType>("pan_india");
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
 
@@ -407,6 +409,8 @@ export function DeliverySettingsPage() {
           const settings = await fetchDeliverySettings(phone);
           if (settings) {
             setStoredOnlineDeliveryEnabled(settings.onlineDeliveryEnabled);
+            setFreeDelivery(settings.storeFreeDelivery === true);
+            setNetworkFreeDelivery(settings.networkFreeDelivery === true);
             setSlabs(settings.weightSlabs);
             // Legacy pan-India docs carry only weightSlabs — seed the in-state
             // editor from it so the seller starts from what they already had.
@@ -460,6 +464,8 @@ export function DeliverySettingsPage() {
           inStateSlabs: inStateSlabs as WeightSlab[],
           outStateSlabs: outStateSlabs as WeightSlab[],
           sellerState,
+          storeFreeDelivery: freeDelivery,
+          ...(isManufacturer ? { networkFreeDelivery } : {}),
         },
       );
       setStatus({ type: "ok", text: t('deliverySavedSuccess') });
@@ -471,7 +477,7 @@ export function DeliverySettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [sellerPhone, canSave, storedOnlineDeliveryEnabled, coverageType, selectedStates, slabs, inStateSlabs, outStateSlabs, sellerState, t]);
+  }, [sellerPhone, canSave, storedOnlineDeliveryEnabled, coverageType, selectedStates, slabs, inStateSlabs, outStateSlabs, sellerState, freeDelivery, networkFreeDelivery, isManufacturer, t]);
 
   // Auto-dismiss success
   useEffect(() => {
@@ -543,6 +549,49 @@ export function DeliverySettingsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Free delivery offer ── */}
+      <Section
+        icon={Truck}
+        title="Free delivery"
+        subtitle="Customers pay nothing for delivery. The courier cost is taken from your payout after the order is booked, so price it into your products."
+      >
+        <div className="flex flex-col gap-4">
+          <label className="flex items-start justify-between gap-4">
+            <span>
+              <span className="block text-sm font-bold text-on-surface">Free delivery on everything I sell</span>
+              <span className="block text-xs text-on-surface-variant">
+                The courier cost (never more than the price shown at checkout) is deducted from your payout, then commission applies.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={freeDelivery}
+              disabled={saving}
+              onChange={(e) => setFreeDelivery(e.target.checked)}
+              className="mt-1 h-5 w-5 shrink-0 accent-[#0f391b]"
+            />
+          </label>
+          {isManufacturer && (
+            <label className="flex items-start justify-between gap-4 border-t border-outline-variant/20 pt-4">
+              <span>
+                <span className="block text-sm font-bold text-on-surface">Free delivery across my retailer network</span>
+                <span className="block text-xs text-on-surface-variant">
+                  Your products ship free from every retailer that sells them. The retailer who ships the order bears the courier cost from their payout — agree this with your network first.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={networkFreeDelivery}
+                disabled={saving}
+                onChange={(e) => setNetworkFreeDelivery(e.target.checked)}
+                className="mt-1 h-5 w-5 shrink-0 accent-[#0f391b]"
+              />
+            </label>
+          )}
+          <p className="text-[11px] text-on-surface-variant">Applies to courier-delivered orders. Remember to press Save below.</p>
+        </div>
+      </Section>
 
       {/* ── Section 2: Delivery Charge Slabs ── */}
       <Section

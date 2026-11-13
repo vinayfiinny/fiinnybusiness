@@ -1418,11 +1418,24 @@ function phoneTail(v: string): string {
   return d.length >= 10 ? d.slice(-10) : "";
 }
 
+/** A delivery address in parts, as checkout collects it (orders.deliveryAddress). */
+export type DeliveryAddress = {
+  house: string;
+  area: string;
+  landmark: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+};
+
 export async function createOrdersFromCart(params: {
   customerId: string;
   customerName: string;
   customerPhone: string;
   customerAddress: string;
+  /** The same address in parts (house / area / landmark / city / state / pincode). */
+  deliveryAddress?: DeliveryAddress;
   /** Finalized delivery-address state — decides in/out-of-state delivery slabs. */
   customerDeliveryState?: string;
   /**
@@ -1443,7 +1456,7 @@ export async function createOrdersFromCart(params: {
     paidAt: string;
   };
 }): Promise<string[]> {
-  const { customerId, customerName, customerPhone, customerAddress, customerDeliveryState, serverBreakdown, items, payment } = params;
+  const { customerId, customerName, customerPhone, customerAddress, deliveryAddress, customerDeliveryState, serverBreakdown, items, payment } = params;
   if (!items.length) return [];
 
   const groups = new Map<string, CartItem[]>();
@@ -1622,6 +1635,7 @@ export async function createOrdersFromCart(params: {
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       customerAddress: customerAddress.trim(),
+      ...(deliveryAddress?.pincode ? { deliveryAddress } : {}),
       ...(customerDeliveryState ? { customerDeliveryState } : {}),
       sellerId,
       sellerType,

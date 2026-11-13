@@ -224,8 +224,18 @@ class PaymentService {
       if (body is! Map || body['quoteOnly'] != true) return null;
       final sellers = body['sellerBreakdown'] is List ? body['sellerBreakdown'] as List : const [];
       final couriers = <String>[];
+      // "Delivery by": the latest seller parcel, and only when every seller
+      // ships by courier with a date (a seller's own delivery has none).
+      String? deliveryBy;
+      var allDated = sellers.isNotEmpty;
       for (final b in sellers.whereType<Map>()) {
         final d = b['delivery'];
+        final by = d is Map && d['courier'] is Map ? (d['courier'] as Map)['deliveryBy']?.toString() : null;
+        if (d is! Map || d['mode'] != 'courier' || by == null || by.isEmpty) {
+          allDated = false;
+        } else if (deliveryBy == null || by.compareTo(deliveryBy) > 0) {
+          deliveryBy = by;
+        }
         if (d is Map && d['mode'] == 'courier' && d['courier'] is Map) {
           final c = d['courier'] as Map;
           final name = c['carrier'] == 'delhivery' ? 'Delhivery ${c['service']}' : 'Shiprocket (${c['service']})';
@@ -237,6 +247,7 @@ class PaymentService {
         delivery: (body['delivery'] as num?)?.toDouble() ?? 0,
         gstAdded: (body['gstAdded'] as num?)?.toDouble() ?? 0,
         couriers: couriers,
+        deliveryBy: allDated ? deliveryBy : null,
       );
     } catch (_) {
       return null;
@@ -418,5 +429,7 @@ class CartQuote {
   final double gstAdded;
   /// One line per seller parcel priced by a courier, e.g. "Delhivery Surface · ~3 days".
   final List<String> couriers;
-  const CartQuote({required this.delivery, required this.gstAdded, required this.couriers});
+  /// Estimated delivery date, YYYY-MM-DD; null unless every parcel has one.
+  final String? deliveryBy;
+  const CartQuote({required this.delivery, required this.gstAdded, required this.couriers, this.deliveryBy});
 }

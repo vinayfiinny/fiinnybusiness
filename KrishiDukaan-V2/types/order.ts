@@ -426,6 +426,8 @@ export type OrderShipment = {
   platformGap?: number;
   /** The platform keeps the delivery fee; it is not part of the seller's payout. */
   platformKeptDelivery?: boolean;
+  /** Free Delivery: courier cost taken from the seller's payout (≤ cost). */
+  sellerPaysCourier?: number;
   reasonText?: string;
   needsAttention?: boolean;
   attentionNote?: string;
@@ -461,6 +463,12 @@ export type OrderDoc = {
   customerName: string;
   customerPhone: string;
   customerAddress: CustomerAddress;
+  /** Newer orders: the address in parts as checkout collected it (web and app).
+   *  customerAddress still holds the joined text for every older screen. */
+  deliveryAddress?: {
+    house?: string; area?: string; landmark?: string;
+    city?: string; district?: string; state?: string; pincode?: string;
+  };
   sellerId: string;
   sellerType: SellerType;
   sellerName?: string;

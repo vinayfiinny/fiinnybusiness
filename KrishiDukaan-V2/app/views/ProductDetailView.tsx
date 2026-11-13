@@ -16,6 +16,7 @@ import { db, trackDirectionRequest, trackProductClick, trackStoreCall, fetchUser
 import { HelperIcon, HelperTooltip } from '../../components/helpers';
 import { useI18n } from '../i18n/I18nContext';
 import { StatusToast } from '../components/shared/status-toast';
+import { DeliveryEstimate } from '../components/shared/delivery-estimate';
 import {
   fetchRetailerPublicProfile,
   fetchRetailerProductSummaries,
@@ -1958,6 +1959,18 @@ export default function ProductDetailView({
             )}
           </div>
         </div>
+          );
+        })()}
+
+        {/* Deliver to <pincode> — courier price and date for the nearest store that delivers */}
+        {product.sellMode !== "offline_store_only" && visibleStores.some(canOrderFrom) && (() => {
+          const chosen = displayStores.find((s) => s.id === selectedOrderStoreId) ?? visibleStores.find(canOrderFrom);
+          return (
+            <DeliveryEstimate
+              productId={product.id}
+              seller={(chosen as any)?.phone}
+              size={selectedVariant?.unit}
+            />
           );
         })()}
 

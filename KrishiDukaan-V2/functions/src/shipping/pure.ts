@@ -12,7 +12,7 @@ export type Stage =
 
 export type SelfReason =
   | "no_pickup_address" | "no_delivery_pincode" | "blocked_category"
-  | "over_value_limit" | "not_serviceable" | "booking_failed";
+  | "over_value_limit" | "not_serviceable" | "booking_failed" | "automation_off";
 
 export interface ShippingConfig {
   /** Off by default: code deployed anywhere does nothing until this is set. */
@@ -160,6 +160,47 @@ export function parseCustomerAddress(raw: unknown, deliveryState?: unknown): Pla
   };
 }
 
+/**
+ * Where an order goes. Newer orders carry a structured `deliveryAddress`
+ * (house / area / landmark / city / state / pincode, written by web and app
+ * checkout); older ones only the customerAddress string or map.
+ */
+export function orderDropPlace(o: Record<string, unknown>): Place {
+  const d = o.deliveryAddress;
+  if (d && typeof d === "object" && !Array.isArray(d)) {
+    const a = d as Record<string, unknown>;
+    const pin = String(a.pincode ?? "").trim();
+    if (validPin(pin)) {
+      const parts = [a.house, a.area, a.landmark ? `Near ${String(a.landmark).trim()}` : ""]
+        .map((x) => String(x ?? "").trim()).filter(Boolean);
+      return {
+        line: parts.join(", "),
+        city: String(a.city ?? a.district ?? "").trim(),
+        state: String(o.customerDeliveryState ?? "").trim() || String(a.state ?? "").trim(),
+        pincode: pin,
+      };
+    }
+  }
+  return parseCustomerAddress(o.customerAddress, o.customerDeliveryState);
+}
+
+/**
+ * The courier cost the seller bears on a Free Delivery order (seller's or
+ * manufacturer's offer; lib/cart-pricing courierDelivery records the checkout
+ * quote as deliveryBreakdown.sellerPaysCourier). Never more than what the
+ * courier actually charged. A reassigned order's new seller never offered free
+ * delivery, so they pay nothing; the platform covers it.
+ */
+export function sellerCourierShare(o: Record<string, unknown>, bookedCost: number | null | undefined): number {
+  const breakdown = (o.deliveryBreakdown ?? {}) as Record<string, unknown>;
+  const agreed = Number(breakdown.sellerPaysCourier ?? 0);
+  if (!(agreed > 0)) return 0;
+  const reassignment = (o.reassignment ?? {}) as Record<string, unknown>;
+  if (reassignment.status === "accepted" || o.adminReassignment) return 0;
+  const cost = Number(bookedCost ?? 0);
+  return cost > 0 ? Math.min(agreed, Math.ceil(cost)) : agreed;
+}
+
 /** A seller document's address, nested or flat. Empty pincode when unusable. */
 export function readSellerPlace(d: Record<string, unknown>): Place {
   const addr = d.address;
@@ -230,6 +271,7 @@ export const SELF_REASON_TEXT: Record<SelfReason, string> = {
   over_value_limit: "Order value needs an e-way bill",
   not_serviceable: "No courier delivers to this address",
   booking_failed: "The courier booking failed",
+  automation_off: "Courier booking is switched off",
 };
 
 /** Reassignment: may this seller be offered the order at this shipping cost? */

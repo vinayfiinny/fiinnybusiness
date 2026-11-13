@@ -21,6 +21,8 @@ import {
   type CourierCharge,
 } from '../../../lib/cart-pricing';
 import { cheapestQuote, courierCheckoutEnabled, dropPincodeFrom, parcelKgFor, pickupPincodeFor } from '../../../lib/courier-quote';
+import { deliveryByDate } from '../../../lib/delivery-eta';
+import { isFreeDelivery, manufacturerPhoneOf } from '../../../lib/free-delivery';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -28,7 +30,11 @@ const razorpay = new Razorpay({
 });
 
 /** One priced cart line plus the seller phone used to find its delivery settings. */
-type ServerLine = CartPricingLine & { sellerPhone?: string };
+type ServerLine = CartPricingLine & {
+  sellerPhone?: string;
+  /** The manufacturer this product belongs to: their network free-delivery applies. */
+  manufacturerPhone?: string;
+};
 
 /** A reason one cart line cannot be ordered — surfaced to the client so it can
  *  tell the shopper exactly which item to fix, never charging a wrong amount. */
@@ -399,6 +405,10 @@ export async function POST(request: Request) {
             gstIncluded: commercial.gstIncluded,
             extraDeliveryCharge: commercial.extraDeliveryCharge,
             freeDelivery: commercial.freeDelivery,
+            manufacturerPhone: manufacturerPhoneOf(
+              (copyDoc?.data() as Record<string, unknown> | undefined) ?? null,
+              prodData as Record<string, unknown> | null,
+            ) || undefined,
           }
         : null;
       // Per-line eligibility inputs, evaluated after the parallel reads below:
@@ -523,6 +533,23 @@ export async function POST(request: Request) {
         { status: 422 },
       );
     }
+    // Free delivery the seller or the product's manufacturer has offered
+    // (lib/free-delivery). The customer pays nothing for delivery; the courier
+    // cost is later taken from the seller's payout, not absorbed by us.
+    const makerPhones = Array.from(new Set(pricingLines.map((l) => l.manufacturerPhone).filter((p): p is string => !!p)));
+    const makerSettings = new Map<string, Record<string, unknown> | null>();
+    await Promise.all(makerPhones.map(async (phone) => {
+      const snap = await db.collection('deliverySettings').doc(phone).get().catch(() => null);
+      makerSettings.set(phone, snap?.exists ? (snap.data() as Record<string, unknown>) : null);
+    }));
+    for (const l of pricingLines) {
+      l.freeDelivery = isFreeDelivery({
+        productFree: l.freeDelivery === true,
+        seller: settingsBySeller.get(l.sellerKey) as Record<string, unknown> | null | undefined,
+        manufacturer: l.manufacturerPhone ? makerSettings.get(l.manufacturerPhone) : null,
+      });
+    }
+
     const linesBySeller = new Map<string, ServerLine[]>();
     for (const l of pricingLines) {
       const list = linesBySeller.get(l.sellerKey) ?? [];
@@ -547,6 +574,7 @@ export async function POST(request: Request) {
             courierBySeller.set(key, {
               charge: Math.ceil(q.cost), carrier: q.carrier, service: q.service,
               etaDays: q.etaDays ?? null, weightKg: kg,
+              deliveryBy: deliveryByDate(q.etaDays),
             });
           }
         } catch (e) {

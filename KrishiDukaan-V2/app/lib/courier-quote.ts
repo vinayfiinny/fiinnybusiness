@@ -1,4 +1,5 @@
 import { getAdminDb } from "./firebase-admin";
+import { expectedPickupDate } from "./delivery-eta";
 
 /**
  * Checkout delivery priced from the couriers.
@@ -117,13 +118,25 @@ async function delhivery(pickup: string, drop: string, kg: number): Promise<Cour
   const code = pin?.delivery_codes?.[0]?.postal_code;
   if (!code || String(code.pre_paid).toUpperCase() !== "Y") return [];
   const grams = Math.ceil(kg * 1000);
-  const rates = await Promise.all((["S", "E"] as const).map((md) =>
-    http(`https://track.delhivery.com/api/kinko/v1/invoice/charges/.json?md=${md}&ss=Delivered&d_pin=${drop}&o_pin=${pickup}&cgm=${grams}&pt=Pre-paid`, { headers: h })
-      .catch(() => null)));
+  const pickupAt = encodeURIComponent(`${expectedPickupDate()} 11:00`);
+  const modes = ["S", "E"] as const;
+  // Price and transit time per mode, all in parallel (transit days drive the
+  // "Delivery by" date the customer sees).
+  const [rates, tats] = await Promise.all([
+    Promise.all(modes.map((md) =>
+      http(`https://track.delhivery.com/api/kinko/v1/invoice/charges/.json?md=${md}&ss=Delivered&d_pin=${drop}&o_pin=${pickup}&cgm=${grams}&pt=Pre-paid`, { headers: h })
+        .catch(() => null))),
+    Promise.all(modes.map((md) =>
+      http(`https://track.delhivery.com/api/dc/expected_tat?origin_pin=${pickup}&destination_pin=${drop}&mot=${md}&pdt=B2C&expected_pickup_date=${pickupAt}`, { headers: h })
+        .catch(() => null))),
+  ]);
   const out: CourierQuote[] = [];
   rates.forEach((r, i) => {
     const cost = Number((Array.isArray(r) ? r[0] : r)?.total_amount);
-    if (Number.isFinite(cost) && cost > 0) out.push({ carrier: "delhivery", service: i === 0 ? "Surface" : "Express", cost });
+    const tat = Number(tats[i]?.data?.tat);
+    if (Number.isFinite(cost) && cost > 0) {
+      out.push({ carrier: "delhivery", service: i === 0 ? "Surface" : "Express", cost, etaDays: Number.isFinite(tat) && tat > 0 ? tat : null });
+    }
   });
   return out;
 }
@@ -180,7 +193,7 @@ export function cheapestOf(quotes: CourierQuote[]): CourierQuote | null {
  */
 export async function cheapestQuote(pickup: string, drop: string, kg: number, value: number): Promise<CourierQuote | null> {
   if (!PIN.test(pickup) || !PIN.test(drop) || !(kg > 0)) return null;
-  const key = `${pickup}_${drop}_${kg.toFixed(1)}`;
+  const key = `v2_${pickup}_${drop}_${kg.toFixed(1)}`;
   const mem = memQuotes.get(key);
   if (mem && Date.now() - mem.at < CACHE_MS) return mem.quote;
   const ref = getAdminDb().collection("courierQuotes").doc(key);

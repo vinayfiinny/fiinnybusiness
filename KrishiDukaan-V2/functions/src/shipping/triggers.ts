@@ -8,7 +8,7 @@ import {
 } from "./carriers";
 import {
   RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, applyEvent, bookForOrder, cancelForOrder, loadConfig,
-  orderIdForAwb, priceReassignmentOffers, requestPickupFor,
+  orderIdForAwb, priceReassignmentOffers, releaseStuckBooking, requestPickupFor,
 } from "./engine";
 import { delhiveryStage, shiprocketStage, type Stage } from "./pure";
 
@@ -68,15 +68,17 @@ export const shipOrderOnChange = onDocumentUpdated(
 export const shipmentSweep = onSchedule(
   { region: REGION, schedule: "every 30 minutes", timeZone: "Asia/Kolkata", secrets: SECRETS, timeoutSeconds: 300 },
   async () => {
+    // Runs even when automation is switched off: parcels already booked must
+    // still be tracked to delivery (that releases the seller's money) and
+    // cancellations retried. Only new bookings stop.
     const cfg = await loadConfig();
-    if (!cfg.enabled) return;
     const snap = await admin.firestore().collection("orders").where("shipment.active", "==", true).limit(300).get();
     let moved = 0;
     for (const d of snap.docs) {
       const o = d.data();
       const s = o.shipment as Record<string, any>;
       try {
-        if (s.stage === "booking") await bookForOrder(d.id);
+        if (s.stage === "booking") await (cfg.enabled ? bookForOrder(d.id) : releaseStuckBooking(d.id));
         else if (s.stage === "cancelling") await cancelForOrder(d.id, "retry");
         else if (!s.simulated && s.awb) {
           const t = await trackShipment(s as unknown as ActiveShipment);

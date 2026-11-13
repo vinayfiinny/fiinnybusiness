@@ -83,7 +83,11 @@ export default function ShipmentCard({ order, sellerView = false }: { order: Ord
 
       {sellerView && (
         <>
-          {s.cost != null && (
+          {s.cost != null && (s.sellerPaysCourier ?? 0) > 0 ? (
+            <p className="text-[11px] font-semibold text-on-surface">
+              Free Delivery order: the courier cost of ₹{s.sellerPaysCourier} is taken from your payout.
+            </p>
+          ) : s.cost != null && (
             <p className="text-[11px] text-on-surface-variant">
               KrishiDukan pays the courier, so the delivery charge is not part of your payout.
             </p>

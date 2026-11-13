@@ -18,6 +18,10 @@ class ShipmentInfo {
   final bool weightGuessed;
   final double? cost;
   final bool platformKeptDelivery;
+
+  /// Free Delivery: the courier cost taken from the seller's payout, capped at
+  /// what the courier charged (functions/src/shipping/pure.ts sellerCourierShare).
+  final double? sellerPaysCourier;
   final String? reasonText;
 
   const ShipmentInfo({
@@ -34,6 +38,7 @@ class ShipmentInfo {
     this.weightGuessed = false,
     this.cost,
     this.platformKeptDelivery = false,
+    this.sellerPaysCourier,
     this.reasonText,
   });
 
@@ -55,6 +60,7 @@ class ShipmentInfo {
       weightGuessed: raw['weightGuessed'] == true,
       cost: (raw['cost'] as num?)?.toDouble(),
       platformKeptDelivery: raw['platformKeptDelivery'] == true,
+      sellerPaysCourier: (raw['sellerPaysCourier'] as num?)?.toDouble(),
       reasonText: raw['reasonText']?.toString(),
     );
   }

@@ -42,6 +42,8 @@ export async function fetchDeliverySettings(
       inStateSlabs: slabsFromData(d.inStateSlabs),
       outStateSlabs: slabsFromData(d.outStateSlabs),
       sellerState: String(d.sellerState ?? ""),
+      storeFreeDelivery: d.storeFreeDelivery === true,
+      networkFreeDelivery: d.networkFreeDelivery === true,
       updatedAt: (d.updatedAt as DeliverySettings["updatedAt"]) ?? null,
     };
   } catch {
@@ -59,6 +61,8 @@ export async function saveDeliverySettings(
     inStateSlabs: WeightSlab[];
     outStateSlabs: WeightSlab[];
     sellerState: string;
+    storeFreeDelivery?: boolean;
+    networkFreeDelivery?: boolean;
   },
 ): Promise<void> {
   const now = serverTimestamp();
@@ -79,6 +83,10 @@ export async function saveDeliverySettings(
       inStateSlabs: isPanIndia ? settings.inStateSlabs : [],
       outStateSlabs: isPanIndia ? settings.outStateSlabs : [],
       sellerState: settings.sellerState ?? "",
+      // Only written when the page sent them, so the first-time seeding above
+      // never switches an offer off.
+      ...(settings.storeFreeDelivery !== undefined ? { storeFreeDelivery: settings.storeFreeDelivery } : {}),
+      ...(settings.networkFreeDelivery !== undefined ? { networkFreeDelivery: settings.networkFreeDelivery } : {}),
       updatedAt: now,
     },
     { merge: true },

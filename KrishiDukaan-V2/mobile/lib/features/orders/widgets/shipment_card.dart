@@ -139,7 +139,12 @@ class _ShipmentCardState extends State<ShipmentCard> {
   }
 
   List<Widget> _sellerParts(ShipmentInfo s) => [
-        if (s.cost != null)
+        if (s.cost != null && (s.sellerPaysCourier ?? 0) > 0)
+          Text(
+            'Free Delivery order: the courier cost of ₹${s.sellerPaysCourier!.toStringAsFixed(0)} is taken from your payout.',
+            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+          )
+        else if (s.cost != null)
           Text(
             'KrishiDukan pays the courier, so the delivery charge is not part of your payout.',
             style: AppTextStyles.caption,

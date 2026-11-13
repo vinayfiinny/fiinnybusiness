@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_CONFIG as C, canCancelAt, courierBlocker, delhiveryStage, nextPickupDate, orderStatusFor, packKg,
   parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shiprocketStage, shouldApply,
-  withinReassignCap, shouldSimulate, type Quote,
+  withinReassignCap, shouldSimulate, orderDropPlace, sellerCourierShare, type Quote,
 } from "../../functions/src/shipping/pure";
 
 // A config that isn't there, or is mistyped, must never mean live or on.
@@ -101,5 +101,30 @@ assert.equal(shiprocketStage("PICKUP SCHEDULED"), null);
 // Pickups skip Sunday. 2026-11-07 is a Saturday.
 assert.equal(nextPickupDate(new Date("2026-11-07T06:00:00Z")), "2026-11-09");
 assert.equal(nextPickupDate(new Date("2026-11-05T06:00:00Z")), "2026-11-06");
+
+
+// Structured delivery address (web/app checkout) wins over the old string
+{
+  const p = orderDropPlace({
+    deliveryAddress: { house: "Flat 4, Sai Heights", area: "Kharadi", landmark: "EON IT Park", city: "Pune", state: "Maharashtra", pincode: "411014" },
+    customerAddress: "old text, 999999",
+    customerDeliveryState: "Maharashtra",
+  });
+  assert.equal(p.pincode, "411014");
+  assert.equal(p.line, "Flat 4, Sai Heights, Kharadi, Near EON IT Park");
+  assert.equal(p.city, "Pune");
+  assert.equal(p.state, "Maharashtra");
+  // No usable pincode in it: fall back to customerAddress
+  assert.equal(orderDropPlace({ deliveryAddress: { pincode: "12" }, customerAddress: "Kharadi, Pune, Pune, Maharashtra, 411014" }).pincode, "411014");
+  assert.equal(orderDropPlace({ customerAddress: { address: "Plot 9", pincode: "414402" } }).pincode, "414402");
+}
+
+// Free Delivery: seller pays the courier, never more than the courier charged
+assert.equal(sellerCourierShare({}, 120), 0);
+assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 } }, 110.4), 111);
+assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 } }, 160), 127);   // excess: platform
+assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 } }, null), 127);
+assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 }, reassignment: { status: "accepted" } }, 100), 0);
+assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 }, adminReassignment: { at: "x" } }, 100), 0);
 
 console.log("shipping: all passed");

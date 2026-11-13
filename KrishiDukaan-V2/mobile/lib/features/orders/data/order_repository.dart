@@ -91,6 +91,10 @@ class OrderRepository {
     /// The address state that picked the delivery slab; stored so the order
     /// (and its invoice) show which slab set applied.
     String? customerDeliveryState,
+
+    /// The address in parts (house / area / landmark / city / district /
+    /// state / pincode) — orders.deliveryAddress, same as web checkout.
+    Map<String, String>? deliveryAddress,
   }) async {
     final user = FirebaseAuth.instance.currentUser!;
 
@@ -128,6 +132,8 @@ class OrderRepository {
         'customerName': customerName,
         'customerPhone': customerPhone,
         'customerAddress': customerAddress,
+        if ((deliveryAddress?['pincode'] ?? '').isNotEmpty)
+          'deliveryAddress': deliveryAddress,
         // sellerId kept as phone for legacy query compatibility. May also be
         // an owner UID when the product carried no phone — web-created orders
         // are keyed that way too, so the dashboard matches either.

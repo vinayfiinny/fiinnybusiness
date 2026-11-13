@@ -72,6 +72,8 @@ export type CourierCharge = {
   etaDays?: number | null;
   /** Billable weight band the quote was for. */
   weightKg: number;
+  /** Estimated delivery date, YYYY-MM-DD (lib/delivery-eta), when the courier gave a transit time. */
+  deliveryBy?: string | null;
 };
 
 export type SellerPricing = {

@@ -75,7 +75,7 @@ export type OrderLike = {
   };
   /** Razorpay's view of this order's transfer (functions/src/payouts/payout-status.ts). */
   payout?: OrderPayout;
-  shipment?: { platformKeptDelivery?: boolean } | null;
+  shipment?: { platformKeptDelivery?: boolean; sellerPaysCourier?: number } | null;
   deliveryBreakdown?: { sellerPaysCourier?: number } | null;
 };
 
@@ -159,7 +159,8 @@ export function grossFor(order: OrderLike): number {
   // seller's. (functions/src/shipping/engine.ts takes it back from the transfer.)
   if (!order.shipment?.platformKeptDelivery) return total;
   // Plus the courier cost the seller bears when every item was Free Delivery.
-  const sellerPays = Math.max(0, Number(order.deliveryBreakdown?.sellerPaysCourier ?? 0));
+  // The shipment's figure (capped at what the courier charged) once booked.
+  const sellerPays = Math.max(0, Number(order.shipment?.sellerPaysCourier ?? order.deliveryBreakdown?.sellerPaysCourier ?? 0));
   return Math.max(0, total - (order.deliveryCharge ?? 0) - sellerPays);
 }
 

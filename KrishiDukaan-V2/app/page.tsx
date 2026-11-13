@@ -235,7 +235,9 @@ export default function App() {
     customerFirstName: "",
     customerLastName: "",
     customerPhone: "",
+    addressHouse: "",
     addressArea: "",
+    addressLandmark: "",
     addressCity: "",
     addressDistrict: "",
     addressState: "",
@@ -813,7 +815,9 @@ export default function App() {
           setCheckoutInfo({
             ...splitPersonName(profileData),
             customerPhone: profileData.phone || "",
+            addressHouse: (profileData as any).addressHouse || "",
             addressArea: (profileData as any).addressArea || "",
+            addressLandmark: (profileData as any).addressLandmark || "",
             addressCity: (profileData as any).addressCity || "",
             addressDistrict: (profileData as any).addressDistrict || "",
             addressState: (profileData as any).addressState || "",
@@ -886,7 +890,9 @@ export default function App() {
           customerFirstName: '',
           customerLastName: '',
           customerPhone: '',
+          addressHouse: '',
           addressArea: '',
+          addressLandmark: '',
           addressCity: '',
           addressDistrict: '',
           addressState: '',
@@ -1324,9 +1330,13 @@ export default function App() {
     setToastType("success");
   };
 
-  // Compute formatted address from structured fields
+  // Compute formatted address from structured fields. Order matters: the
+  // courier engine reads city/state from the END of this string
+  // (functions/src/shipping/pure.ts parseCustomerAddress), so new parts go first.
   const customerAddress = [
+    checkoutInfo.addressHouse,
     checkoutInfo.addressArea,
+    checkoutInfo.addressLandmark.trim() ? `Near ${checkoutInfo.addressLandmark.trim()}` : "",
     checkoutInfo.addressCity,
     checkoutInfo.addressDistrict,
     checkoutInfo.addressState,
@@ -1352,6 +1362,16 @@ export default function App() {
       customerName: fullCustomerName(checkoutInfo),
       customerPhone: checkoutInfo.customerPhone,
       customerAddress,
+      // The same address in parts, for couriers and invoices (orders.deliveryAddress).
+      deliveryAddress: {
+        house: checkoutInfo.addressHouse.trim(),
+        area: checkoutInfo.addressArea.trim(),
+        landmark: checkoutInfo.addressLandmark.trim(),
+        city: checkoutInfo.addressCity.trim(),
+        district: checkoutInfo.addressDistrict.trim(),
+        state: checkoutInfo.addressState.trim(),
+        pincode: checkoutInfo.addressPincode.trim(),
+      },
       // The finalized delivery-address state — decides in/out-of-state slabs so
       // the order's persisted delivery charge matches what the server charged.
       customerDeliveryState: checkoutInfo.addressState.trim(),
@@ -1410,8 +1430,24 @@ export default function App() {
       setCheckoutMessage("Please enter your phone number.");
       return;
     }
-    if (!customerAddress.trim()) {
-      setCheckoutMessage("Please enter your delivery address.");
+    if (!/^[1-9]\d{5}$/.test(checkoutInfo.addressPincode.trim())) {
+      setCheckoutMessage("Please enter your 6-digit pincode.");
+      return;
+    }
+    if (!checkoutInfo.addressHouse.trim()) {
+      setCheckoutMessage("Please enter your flat / house number or building.");
+      return;
+    }
+    if (!checkoutInfo.addressArea.trim()) {
+      setCheckoutMessage("Please enter your area, street or village.");
+      return;
+    }
+    if (!checkoutInfo.addressCity.trim()) {
+      setCheckoutMessage("Please enter your town or city.");
+      return;
+    }
+    if (!checkoutInfo.addressState.trim()) {
+      setCheckoutMessage("Please choose your state.");
       return;
     }
 
@@ -1960,7 +1996,9 @@ export default function App() {
             customerFirstName={checkoutInfo.customerFirstName}
             customerLastName={checkoutInfo.customerLastName}
             customerPhone={checkoutInfo.customerPhone}
+            addressHouse={checkoutInfo.addressHouse}
             addressArea={checkoutInfo.addressArea}
+            addressLandmark={checkoutInfo.addressLandmark}
             addressCity={checkoutInfo.addressCity}
             addressDistrict={checkoutInfo.addressDistrict}
             addressState={checkoutInfo.addressState}
@@ -2055,7 +2093,9 @@ export default function App() {
                 const phone = idxSnap.exists() ? idxSnap.data().phone : null;
                 if (phone) {
                   await updateDoc(doc(db, 'users', phone), { 
+                    addressHouse: checkoutInfo.addressHouse,
                     addressArea: checkoutInfo.addressArea,
+                    addressLandmark: checkoutInfo.addressLandmark,
                     addressCity: checkoutInfo.addressCity,
                     addressDistrict: checkoutInfo.addressDistrict,
                     addressState: checkoutInfo.addressState,

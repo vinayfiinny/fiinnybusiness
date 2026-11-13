@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import '../data/server_priced_items.dart';
+import '../../../core/utils/delivery_date.dart';
 import '../../../core/payments/app_razorpay.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_config.dart';
@@ -45,7 +46,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
+  // Amazon-style address: pincode, flat/house, area/village, landmark, town, state.
+  final _houseCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController(); // area, street, sector, village
+  final _landmarkCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _pincodeCtrl = TextEditingController();
   final _districtCtrl = TextEditingController();
@@ -121,7 +125,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
     _phoneCtrl.dispose();
+    _houseCtrl.dispose();
     _addressCtrl.dispose();
+    _landmarkCtrl.dispose();
     _cityCtrl.dispose();
     _pincodeCtrl.dispose();
     _districtCtrl.dispose();
@@ -217,10 +223,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   /// The address exactly as written to the order and sent to the server.
+  /// House, area and landmark as one line — `address` in the order's map,
+  /// which every existing screen and the courier already read.
+  String get _addressLine => [
+        _houseCtrl.text.trim(),
+        _addressCtrl.text.trim(),
+        if (_landmarkCtrl.text.trim().isNotEmpty) 'Near ${_landmarkCtrl.text.trim()}',
+      ].where((p) => p.isNotEmpty).join(', ');
+
+  /// The address in parts (orders.deliveryAddress, same as web checkout).
+  Map<String, String> _deliveryAddress() => {
+        'house': _houseCtrl.text.trim(),
+        'area': _addressCtrl.text.trim(),
+        'landmark': _landmarkCtrl.text.trim(),
+        'city': _cityCtrl.text.trim(),
+        'district': _districtCtrl.text.trim(),
+        'state': _state ?? '',
+        'pincode': _pincodeCtrl.text.trim(),
+      };
+
   Map<String, dynamic> _addressMap() => {
         'name': _fullName,
         'phone': _phoneCtrl.text.trim(),
-        'address': _addressCtrl.text.trim(),
+        'address': _addressLine,
         'city': _cityCtrl.text.trim(),
         if (_districtCtrl.text.trim().isNotEmpty)
           'district': _districtCtrl.text.trim(),
@@ -466,6 +491,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // estimate this screen showed.
       pricingBySeller: pricing,
       customerDeliveryState: _state,
+      deliveryAddress: _deliveryAddress(),
     );
 
     // GA4 purchase: we only get here after the server verified the payment
@@ -696,30 +722,45 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         ],
                         validator: _required),
                     const SizedBox(height: 12),
-                    _field(_addressCtrl, 'Street Address', Icons.home_outlined,
-                        maxLines: 2, validator: _required),
+                    // Pincode first: it fills town, district and state.
+                    _field(_pincodeCtrl, 'Pincode *', Icons.pin,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        validator: (v) => RegExp(r'^[1-9]\d{5}$').hasMatch((v ?? '').trim())
+                            ? null
+                            : 'Enter your 6-digit pincode'),
+                    const SizedBox(height: 12),
+                    _field(_houseCtrl, 'Flat, House no., Building, Company, Apartment *',
+                        Icons.home_outlined,
+                        textCapitalization: TextCapitalization.words,
+                        validator: _required),
+                    const SizedBox(height: 12),
+                    _field(_addressCtrl, 'Area, Street, Sector, Village *',
+                        Icons.signpost_outlined,
+                        textCapitalization: TextCapitalization.words,
+                        validator: _required),
+                    const SizedBox(height: 12),
+                    _field(_landmarkCtrl, 'Landmark (optional), e.g. near Hanuman temple',
+                        Icons.place_outlined,
+                        textCapitalization: TextCapitalization.sentences),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: _field(_cityCtrl, 'City', Icons.location_city,
+                          child: _field(_cityCtrl, 'Town / City *', Icons.location_city,
+                              textCapitalization: TextCapitalization.words,
                               validator: _required),
                         ),
                         const SizedBox(width: 12),
-                        SizedBox(
-                          width: 116,
-                          child: _field(_pincodeCtrl, 'Pincode', Icons.pin,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(6),
-                              ],
-                              validator: _required),
+                        Expanded(
+                          child: _field(_districtCtrl, 'District', Icons.map_outlined,
+                              textCapitalization: TextCapitalization.words),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    _field(_districtCtrl, 'District (optional)', Icons.map_outlined),
                     const SizedBox(height: 12),
                     // A dropdown, not free text: the state decides the
                     // delivery charge, so it must be a recognised name.
@@ -728,7 +769,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       isExpanded: true,
                       menuMaxHeight: 340,
                       decoration: InputDecoration(
-                        labelText: 'State',
+                        labelText: 'State *',
                         prefixIcon: const Icon(Icons.flag_outlined, size: 20),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -807,6 +848,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                 ? 'Within-State'
                                 : 'Outside-State'),
                       ),
+                      if (formatDeliveryDate(_quote?.deliveryBy) != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'Delivery by ${formatDeliveryDate(_quote?.deliveryBy)}',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
                       if (_quote?.couriers.isNotEmpty ?? false)
                         Align(
                           alignment: Alignment.centerLeft,
