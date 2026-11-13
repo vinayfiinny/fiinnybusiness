@@ -58,6 +58,7 @@ import '../../features/reels/screens/shop_profile_screen.dart';
 import '../../features/reels/screens/followers_screen.dart';
 import '../../features/reels/providers/reels_provider.dart';
 import '../models/reel_model.dart';
+import '../services/analytics_service.dart';
 
 final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -194,7 +195,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier(ref);
   ref.onDispose(notifier.dispose);
 
-  return GoRouter(
+  final router = GoRouter(
     navigatorKey: _rootKey,
     refreshListenable: notifier,
     initialLocation: '/splash',
@@ -773,6 +774,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  // GA4 screen_view on every route change (path ids folded to :id).
+  void logScreen() {
+    final uri = router.routerDelegate.currentConfiguration.uri;
+    AnalyticsService.instance.screenView(uri.path);
+  }
+  router.routerDelegate.addListener(logScreen);
+  ref.onDispose(() => router.routerDelegate.removeListener(logScreen));
+  return router;
 });
 
 class _RouterRefreshNotifier extends ChangeNotifier {

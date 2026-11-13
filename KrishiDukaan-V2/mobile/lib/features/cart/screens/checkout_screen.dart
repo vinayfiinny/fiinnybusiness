@@ -29,6 +29,7 @@ import '../data/payment_service.dart';
 import '../../orders/data/order_repository.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/widgets/back_or_home_button.dart';
+import '../../../core/services/analytics_service.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -98,6 +99,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       onSuccess: _onPaymentSuccess,
       onError: _onPaymentError,
     );
+    // GA4 begin_checkout: the customer entered checkout (from the cart or Buy Now).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AnalyticsService.instance.beginCheckout(ref.read(cartProvider));
+    });
 
     _pincodeCtrl.addListener(_onPincodeChanged);
 
@@ -283,6 +288,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _error = null;
     });
 
+    // GA4 add_shipping_info: delivery details passed validation and can be
+    // delivered to. (No address or phone goes into the event.)
+    AnalyticsService.instance.addShippingInfo(ref.read(cartProvider));
+
     try {
       final items = ref.read(cartProvider);
       final user = FirebaseAuth.instance.currentUser!;
@@ -340,6 +349,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // Use the key the backend used to create the order — prevents key-mismatch
       // errors when the server's RAZORPAY_KEY_ID differs from the app default.
       final razorpayKey = result['key_id'] as String? ?? AppConfig.razorpayKeyId;
+
+      // GA4 add_payment_info: the payment step is opening (label only).
+      AnalyticsService.instance.addPaymentInfo(items);
 
       _razorpay.open({
         'key': razorpayKey,
@@ -438,10 +450,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final items = ref.read(cartProvider);
     final user = FirebaseAuth.instance.currentUser!;
     final delivery = await ref.read(deliveryChargeProvider.future);
+    // Each line at the price the server charged, so the order matches it.
+    final pricedItems = withServerPrices(items, _serverItems);
+    final pricing = _serverPricing ??
+        {for (final sp in delivery.sellers) sp.sellerKey: sp};
 
-    await _orderRepo.createOrdersAfterPayment(
-      // Each line at the price the server charged, so the order matches it.
-      items: withServerPrices(items, _serverItems),
+    final orderIds = await _orderRepo.createOrdersAfterPayment(
+      items: pricedItems,
       customerName: _fullName,
       customerPhone: user.phoneNumber ?? '',
       customerAddress: _addressMap(),
@@ -449,10 +464,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       razorpayPaymentId: razorpayPaymentId,
       // The server's figures when we have them (what was charged), else the
       // estimate this screen showed.
-      pricingBySeller: _serverPricing ??
-          {for (final sp in delivery.sellers) sp.sellerKey: sp},
+      pricingBySeller: pricing,
       customerDeliveryState: _state,
     );
+
+    // GA4 purchase: we only get here after the server verified the payment
+    // (signature check) or Razorpay's own records confirmed the capture, and
+    // the orders were written. Values are the server's: item prices it
+    // charged, its delivery and its added GST. Sent once per payment.
+    unawaited(AnalyticsService.instance.logPurchase(
+      transactionId: razorpayPaymentId,
+      lines: pricedItems,
+      shipping: pricing.values.fold(0.0, (s, sp) => s + sp.deliveryCharge),
+      tax: pricing.values.fold(0.0, (s, sp) => s + sp.gstAdded),
+      orderIds: orderIds,
+    ));
 
     ref.read(cartProvider.notifier).clear();
     // Fire-and-forget: never block navigation on the review prompt.

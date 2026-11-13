@@ -74,7 +74,8 @@ class OrderRepository {
   }
 
   /// Creates one order doc per unique seller after successful payment.
-  Future<void> createOrdersAfterPayment({
+  /// Returns the ids of the orders written (one per seller).
+  Future<List<String>> createOrdersAfterPayment({
     required List<CartItemModel> items,
     required String customerName,
     required String customerPhone,
@@ -105,6 +106,7 @@ class OrderRepository {
     }
 
     final batch = _db.batch();
+    final orderIds = <String>[];
 
     for (final entry in bySeller.entries) {
       final sellerPhone = entry.key;
@@ -120,6 +122,7 @@ class OrderRepository {
       final state = (customerDeliveryState ?? '').trim();
 
       final orderRef = _db.collection('orders').doc();
+      orderIds.add(orderRef.id);
       batch.set(orderRef, {
         'customerId': user.uid,
         'customerName': customerName,
@@ -193,6 +196,7 @@ class OrderRepository {
     }
 
     await batch.commit();
+    return orderIds;
   }
 
   /// This seller's pricing: the server's / estimate's figure when there is one

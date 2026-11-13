@@ -31,7 +31,8 @@
       ],
       "frameworksBackend": {
         "region": "asia-south1",
-        "memory": "1GiB"
+        "memory": "1GiB",
+        "secrets": ["RAZORPAY_WEBHOOK_SECRET"]
       },
       "appAssociation": "NONE",
       "headers": [
@@ -54,7 +55,8 @@
       ],
       "frameworksBackend": {
         "region": "asia-south1",
-        "memory": "1GiB"
+        "memory": "1GiB",
+        "secrets": ["RAZORPAY_WEBHOOK_SECRET"]
       }
     }
   ]

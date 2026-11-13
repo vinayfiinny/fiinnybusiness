@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'core/firebase/firebase_options.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/analytics_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Firebase Analytics (GA4): user id = uid; events via AnalyticsService.
+  AnalyticsService.instance.start();
 
   if (!kIsWeb) {
     // FCM background handler must be registered before runApp

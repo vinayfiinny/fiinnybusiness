@@ -14,6 +14,7 @@ import '../utils/delivery_utils.dart';
 import '../utils/gst_utils.dart';
 import '../utils/weight_utils.dart';
 import 'user_provider.dart';
+import '../services/analytics_service.dart';
 
 class CartNotifier extends StateNotifier<List<CartItemModel>> {
   CartNotifier() : super([]) {
@@ -110,6 +111,7 @@ class CartNotifier extends StateNotifier<List<CartItemModel>> {
   }
 
   void addItem(CartItemModel item) {
+    AnalyticsService.instance.addToCart(item, item.quantity);
     // If same listing already in cart, increment quantity
     final idx = state.indexWhere(
       (e) => e.listingId == item.listingId && e.variantLabel == item.variantLabel,
@@ -159,6 +161,11 @@ class CartNotifier extends StateNotifier<List<CartItemModel>> {
   }
 
   void removeItem(String listingId, String? variantLabel) {
+    for (final e in state) {
+      if (e.listingId == listingId && e.variantLabel == variantLabel) {
+        AnalyticsService.instance.removeFromCart(e, e.quantity);
+      }
+    }
     state = state
         .where((e) => !(e.listingId == listingId && e.variantLabel == variantLabel))
         .toList();
@@ -172,6 +179,10 @@ class CartNotifier extends StateNotifier<List<CartItemModel>> {
     }
     state = state.map((e) {
       if (e.listingId == listingId && e.variantLabel == variantLabel) {
+        // The change THIS tap made: + is add_to_cart, - is remove_from_cart.
+        final diff = qty - e.quantity;
+        if (diff > 0) AnalyticsService.instance.addToCart(e, diff);
+        if (diff < 0) AnalyticsService.instance.removeFromCart(e, -diff);
         return e.copyWith(quantity: qty);
       }
       return e;

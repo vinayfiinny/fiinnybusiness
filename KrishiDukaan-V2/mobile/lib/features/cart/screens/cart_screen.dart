@@ -13,12 +13,27 @@ import '../../../core/utils/currency_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../marketplace/widgets/store_selector_sheet.dart';
 import '../../../core/widgets/back_or_home_button.dart';
+import '../../../core/services/analytics_service.dart';
 
-class CartScreen extends ConsumerWidget {
+class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends ConsumerState<CartScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // GA4 view_cart: once per opening of the cart screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AnalyticsService.instance.viewCart(ref.read(cartProvider));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(cartProvider);
 
     return Scaffold(

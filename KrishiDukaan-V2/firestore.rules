@@ -461,6 +461,19 @@ service cloud.firestore {
     // anyway. Writes go through /api/admin/pricing (Admin SDK, requireAdmin,
     // adminLogs), never from a client, because this document decides what a
     // seller is charged.
+    // GA4 purchase de-duplication (mobile AnalyticsService): one record per
+    // Razorpay payment, created once by the shopper who paid, never changed.
+    // Its existence means "purchase already sent", so a retry or another
+    // device can't count the same payment twice in Google Ads.
+    match /analyticsPurchases/{txId} {
+      allow get: if isAuthed() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isAuthed()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'platform', 'orderIds', 'at'])
+        && request.resource.data.orderIds is list && request.resource.data.orderIds.size() <= 20;
+      allow list, update, delete: if false;
+    }
+
     match /settings/{settingId} {
       allow read: if true;
       allow write: if false;

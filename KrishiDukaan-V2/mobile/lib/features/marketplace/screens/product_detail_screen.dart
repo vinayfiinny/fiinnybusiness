@@ -38,6 +38,7 @@ import '../../reels/providers/reels_provider.dart';
 import '../../reels/screens/shop_profile_screen.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../../core/widgets/back_or_home_button.dart';
+import '../../../core/services/analytics_service.dart';
 
 /// Best-effort, silent bump of one or more `products/{catalogId}` analytics
 /// counters — same doc, same field shapes, same "authenticated shopper" gate
@@ -131,6 +132,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         error: (e, _) =>
             const BackBarBody(child: ErrorView(message: 'Failed to load product.')),
         data: (catalog) {
+          if (catalog != null) {
+            // GA4 view_item (once per product per session, rebuilds ignored).
+            AnalyticsService.instance.viewItem(catalog);
+          }
           if (catalog == null) {
             // e.g. a shared link to a deleted product.
             return const BackBarBody(
