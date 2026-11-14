@@ -21,12 +21,13 @@
 /// transaction as the invoice, so only admin/analyst can bill. A shopkeeper
 /// sale would be rejected by the rules at commit — the web POS has the same
 /// limit today.
-enum ErpRole { manager, shopkeeper, sales, other }
+enum ErpRole { manager, shopkeeper, sales, retailer, other }
 
 ErpRole roleFromString(String role) => switch (role) {
       'admin' || 'analyst' || 'master' => ErpRole.manager,
       'shopkeeper' => ErpRole.shopkeeper,
       'sales' => ErpRole.sales,
+      'retailer' => ErpRole.retailer,
       _ => ErpRole.other,
     };
 
@@ -69,7 +70,12 @@ class Capabilities {
   /// Sales users only see the retailers assigned to them (useSalesFilter.ts).
   bool get isScopedToAssignedRetailers => role == ErpRole.sales;
 
-  /// Anything to show at all. Portal users (retailer/manufacturer) have their
-  /// own web portals and nothing in this app.
-  bool get canUseApp => role != ErpRole.other;
+  /// The staff app (billing, stock, dashboards). Portal users never get it.
+  bool get canUseApp => role != ErpRole.other && role != ErpRole.retailer;
+
+  /// A retailer invited by the business (Admin → Invite Retailer on the web,
+  /// or Portal access in this app). They get the read-only retailer portal:
+  /// their OWN bills, payments and balance — the same view the web gives them
+  /// at /worklist/{linkedId}. Manufacturer portal users still have no app.
+  bool get isRetailerPortal => role == ErpRole.retailer;
 }

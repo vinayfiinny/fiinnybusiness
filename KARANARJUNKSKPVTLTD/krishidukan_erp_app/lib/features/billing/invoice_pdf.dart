@@ -87,6 +87,10 @@ Future<pw.ThemeData?> _loadTheme() async {
   return _theme;
 }
 
+/// The same Hind font theme for other PDFs (the retailer ledger statement),
+/// so ₹ and Marathi names print there too. null → Helvetica, use "Rs.".
+Future<pw.ThemeData?> loadPdfTheme() => _loadTheme();
+
 /// Builds an A4 invoice PDF from a saved salesOrders document — the stored
 /// numbers, never recomputed ones, so a reprint always matches the ledger.
 /// Handles both shapes: B2B (itemDescription/rate/grossAmount) and POS

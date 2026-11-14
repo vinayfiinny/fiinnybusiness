@@ -13,6 +13,7 @@ import '../auth/auth_repository.dart';
 import '../billing/b2b_invoice_screen.dart';
 import '../billing/bill_detail_screen.dart';
 import '../billing/pos_screen.dart';
+import '../portal_access/portal_access_screen.dart';
 import 'customer.dart';
 import 'customer_form_screen.dart';
 import 'customers_repository.dart';
@@ -146,6 +147,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                       label: const Text('B2B invoice'),
                     ),
                 ]),
+                PartnerPortalAccessCard(customer: c),
                 SectionTitle('Ledger (${l.entries.length})'),
                 if (!l.paymentsVisible)
                   Padding(

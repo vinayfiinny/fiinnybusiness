@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/access.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/auth/login_screen.dart';
+import '../features/portal/portal_shell.dart';
 import '../features/settings/theme_provider.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/offline_banner.dart';
@@ -55,11 +56,17 @@ class _Root extends ConsumerWidget {
               error: (e, __) => _AccessDenied(message: _messageFor(e)),
               data: (appUser) {
                 if (appUser == null) return const LoginScreen();
+                // An invited retailer gets their own read-only portal.
+                if (appUser.can.isRetailerPortal) {
+                  return RetailerPortalGate(
+                    blocked: (message) => _AccessDenied(message: message),
+                  );
+                }
                 if (!appUser.can.canUseApp) {
                   return const _AccessDenied(
                     message:
-                        'This app is for your business team (admin, analyst, shopkeeper or sales). '
-                        'Retailer and manufacturer accounts use their portal in the web ERP.',
+                        'This app is for your business team (admin, analyst, shopkeeper or sales) '
+                        'and invited retailers. Manufacturer accounts use their portal in the web ERP.',
                   );
                 }
                 return const HomeShell();

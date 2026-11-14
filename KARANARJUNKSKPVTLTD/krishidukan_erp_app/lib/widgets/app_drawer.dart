@@ -14,6 +14,8 @@ import '../features/business/online_orders_screen.dart';
 import '../features/business/stock_movements_screen.dart';
 import '../features/business/suppliers_screen.dart';
 import '../features/khata/khata_screen.dart';
+import '../features/portal_access/portal_access_repository.dart';
+import '../features/portal_access/portal_access_screen.dart';
 import '../features/settings/theme_provider.dart';
 import 'all_features_sheet.dart';
 import 'ui.dart';
@@ -27,6 +29,7 @@ class AppDrawer extends ConsumerWidget {
     final tab = ref.watch(currentTabProvider);
     final variant = ref.watch(themeVariantProvider);
     final access = ref.watch(accessProvider);
+    final canInviteRetailers = ref.watch(canInviteRetailersProvider) == true;
     final stack = access == null ? const <AppTab>[] : stackTabsFor(access);
 
     void go(AppTab t) {
@@ -140,6 +143,11 @@ class AppDrawer extends ConsumerWidget {
                     if (access.onlineOrders)
                       _DrawerItem(Icons.shopping_bag_outlined, 'Online orders',
                           onTap: () => push(const OnlineOrdersScreen())),
+                  ],
+                  if (canInviteRetailers) ...[
+                    const _DrawerLabel('Access'),
+                    _DrawerItem(Icons.storefront_outlined, 'Retailer portal access',
+                        onTap: () => push(const PortalAccessScreen())),
                   ],
                   const _DrawerLabel('Web ERP'),
                   _DrawerItem(Icons.grid_view_rounded, 'All features',

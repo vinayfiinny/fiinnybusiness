@@ -22,6 +22,7 @@ class TenantSubscription {
     required this.planName,
     this.expiresAt,
     this.screens = const {},
+    this.features,
   });
 
   final SubStatus status;
@@ -32,6 +33,27 @@ class TenantSubscription {
   /// plans/{planId}.screens ∪ overrides.screens — the same set the web's
   /// resolveEntitlements() builds.
   final Set<String> screens;
+
+  /// plans/{planId}.features ∪ overrides.features — sub-section allowlist.
+  /// null when empty: "not restricted at that granularity" (resolveEntitlements).
+  final Set<String>? features;
+
+  /// Mirrors isFeatureAllowedByPlan() in src/utils/subscriptionPlans.ts: a
+  /// module whose sections are listed only allows the listed sections; any
+  /// other module is unrestricted below its screen.
+  bool allowsFeature(String featureId) {
+    final f = features;
+    if (f == null || f.isEmpty) return true;
+    final module = featureId.split('.').first;
+    if (!f.any((sec) => sec.split('.').first == module)) return true;
+    return f.any((sec) => featureId == sec || featureId.startsWith('$sec.'));
+  }
+
+  /// Mirrors isFeatureGroupAllowed() in src/utils/subscriptionCatalog.ts for
+  /// screenful groups (worklist, supplierLedger, reports): on unless the plan
+  /// stores the `<group>.__excluded__` marker.
+  bool allowsFeatureGroup(String group) =>
+      !(features?.contains('$group.__excluded__') ?? false);
 
   /// Mirrors isScreenAllowedByPlan() in src/utils/subscriptionPlans.ts:
   /// no plan → restricted; suspended/cancelled → restricted; past_due is a
@@ -80,10 +102,12 @@ final subscriptionProvider = StreamProvider<TenantSubscription?>((ref) {
     final planId = data['planId'] as String?;
     var planName = planId ?? 'Unknown plan';
     final screens = <String>{..._strings(_overrideScreens(data))};
+    final features = <String>{..._strings(_overrideFeatures(data))};
     if (planId != null) {
       final planDoc = await db.collection('plans').doc(planId).get();
       planName = (planDoc.data()?['name'] as String?) ?? planName;
       screens.addAll(_strings(planDoc.data()?['screens']));
+      features.addAll(_strings(planDoc.data()?['features']));
     }
     final expiresRaw = data['expiresAt'];
     return TenantSubscription(
@@ -92,6 +116,7 @@ final subscriptionProvider = StreamProvider<TenantSubscription?>((ref) {
       planName: planName,
       expiresAt: expiresRaw is Timestamp ? expiresRaw.toDate() : null,
       screens: screens,
+      features: features.isEmpty ? null : features,
     );
   });
 });
@@ -99,6 +124,11 @@ final subscriptionProvider = StreamProvider<TenantSubscription?>((ref) {
 dynamic _overrideScreens(Map<String, dynamic> sub) {
   final o = sub['overrides'];
   return o is Map ? o['screens'] : null;
+}
+
+dynamic _overrideFeatures(Map<String, dynamic> sub) {
+  final o = sub['overrides'];
+  return o is Map ? o['features'] : null;
 }
 
 Iterable<String> _strings(dynamic v) =>

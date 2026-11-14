@@ -8,15 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/theme.dart';
+import 'core/env.dart';
 import 'features/settings/theme_provider.dart';
 import 'firebase_options.dart';
 
-/// `flutter run --dart-define=USE_EMULATOR=true` points the app at the local
-/// Auth + Firestore emulators under a demo- project id, so billing can be
-/// exercised end to end without any chance of touching production data.
-const _useEmulator = bool.fromEnvironment('USE_EMULATOR');
-const _emulatorHost =
-    String.fromEnvironment('EMULATOR_HOST', defaultValue: 'localhost');
+// USE_EMULATOR / EMULATOR_HOST: see core/env.dart.
+const _useEmulator = useFirebaseEmulator;
+const _emulatorHost = firebaseEmulatorHost;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

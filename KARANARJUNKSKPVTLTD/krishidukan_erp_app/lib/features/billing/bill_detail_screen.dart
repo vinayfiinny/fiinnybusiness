@@ -28,8 +28,12 @@ final _orderProvider = StreamProvider.autoDispose
 /// print / WhatsApp. Read-only — corrections stay in the web ERP, which owns
 /// the edit-and-reverse logic.
 class BillDetailScreen extends ConsumerStatefulWidget {
-  const BillDetailScreen({super.key, required this.orderId});
+  const BillDetailScreen({super.key, required this.orderId, this.portal = false});
   final String orderId;
+
+  /// Opened by a retailer portal user viewing their own bill: share / print
+  /// only — no WhatsApp-to-customer, no staff instructions.
+  final bool portal;
 
   @override
   ConsumerState<BillDetailScreen> createState() => _BillDetailScreenState();
@@ -173,7 +177,10 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
               ]),
             ),
             const SizedBox(height: 12),
-            Text('To correct or cancel a bill, use the web ERP — it reverses stock and balances safely.',
+            Text(
+                widget.portal
+                    ? 'Something wrong on this bill? Contact ${ref.read(appUserProvider).valueOrNull?.businessName ?? 'your supplier'} to correct it.'
+                    : 'To correct or cancel a bill, use the web ERP — it reverses stock and balances safely.',
                 style: TextStyle(fontSize: 11, color: AppColors.inkMute)),
           ],
         ),
@@ -199,7 +206,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                     name: name, onLayout: (_) async => bytes)),
             icon: const Icon(Icons.print_rounded),
           ),
-          if (bill.phone.isNotEmpty)
+          if (bill.phone.isNotEmpty && !widget.portal)
             IconButton.filledTonal(
               tooltip: 'WhatsApp',
               onPressed: () => _whatsApp(o),

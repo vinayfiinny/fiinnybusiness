@@ -24,6 +24,7 @@ class AppUser {
     required this.businessName,
     this.assignedRetailers = const [],
     this.assignedDistricts = const [],
+    this.linkedId = '',
   });
 
   final String uid;
@@ -36,6 +37,11 @@ class AppUser {
   /// Data scope for the 'sales' role — same fields useSalesFilter.ts reads.
   final List<String> assignedRetailers;
   final List<String> assignedDistricts;
+
+  /// Portal users only: the retailers/{id} doc this login belongs to. Every
+  /// read a retailer makes is keyed on it, and firestore.rules
+  /// (isPortalUser) compare against the same field.
+  final String linkedId;
 
   Capabilities get can => Capabilities.of(role);
 
@@ -89,6 +95,7 @@ final appUserProvider = FutureProvider<AppUser?>((ref) async {
     businessName: businessName,
     assignedRetailers: _stringList(data['assignedRetailers']),
     assignedDistricts: _stringList(data['assignedDistricts']),
+    linkedId: (data['linkedId'] as String?)?.trim() ?? '',
   );
 });
 
