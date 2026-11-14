@@ -185,11 +185,16 @@ export function orderDropPlace(o: Record<string, unknown>): Place {
 }
 
 /**
- * The courier cost the seller bears on a Free Delivery order (seller's or
- * manufacturer's offer; lib/cart-pricing courierDelivery records the checkout
- * quote as deliveryBreakdown.sellerPaysCourier). Never more than what the
- * courier actually charged. A reassigned order's new seller never offered free
- * delivery, so they pay nothing; the platform covers it.
+ * The courier cost the seller bears on a delivery-offer order: Free Delivery
+ * (all of it) or a share offer (part of it) — the seller's, the store's or the
+ * manufacturer network's, or the store's "free above ₹X" (lib/cart-pricing
+ * records the checkout figure as deliveryBreakdown.sellerPaysCourier).
+ *
+ * The platform pays the courier and keeps what the customer paid, so the
+ * seller covers only the gap: never more than they agreed at checkout, never
+ * more than the courier actually charged minus what the customer paid. A
+ * reassigned order's new seller never made the offer, so they pay nothing;
+ * the platform covers it.
  */
 export function sellerCourierShare(o: Record<string, unknown>, bookedCost: number | null | undefined): number {
   const breakdown = (o.deliveryBreakdown ?? {}) as Record<string, unknown>;
@@ -198,7 +203,9 @@ export function sellerCourierShare(o: Record<string, unknown>, bookedCost: numbe
   const reassignment = (o.reassignment ?? {}) as Record<string, unknown>;
   if (reassignment.status === "accepted" || o.adminReassignment) return 0;
   const cost = Number(bookedCost ?? 0);
-  return cost > 0 ? Math.min(agreed, Math.ceil(cost)) : agreed;
+  if (!(cost > 0)) return agreed;
+  const customerPaid = Math.max(0, Number(o.deliveryCharge ?? 0) || 0);
+  return Math.max(0, Math.min(agreed, Math.ceil(cost) - customerPaid));
 }
 
 /** A seller document's address, nested or flat. Empty pincode when unusable. */

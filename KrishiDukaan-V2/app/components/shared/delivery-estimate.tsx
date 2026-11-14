@@ -15,6 +15,11 @@ type Estimate = {
   available?: boolean;
   free?: boolean;
   charge?: number;
+  fullCharge?: number;
+  /** The store pays this % of delivery (share offers). */
+  sellerPct?: number;
+  /** Free delivery on orders of at least this much from the store. */
+  freeAbove?: number | null;
   deliveryBy?: string | null;
   etaDays?: number | null;
 };
@@ -106,10 +111,23 @@ export function DeliveryEstimate({ productId, seller, size }: { productId: strin
           {loading ? (
             <span className="text-xs text-on-surface-variant">Checking delivery…</span>
           ) : !est ? null : est.available ? (
-            <span className="font-semibold text-on-surface">
-              {est.free ? <span className="text-green-700">FREE delivery</span> : <>Delivery ₹{est.charge}</>}
-              {est.deliveryBy && <> by <span className="text-green-700">{formatDeliveryDate(est.deliveryBy)}</span></>}
-            </span>
+            <>
+              <span className="font-semibold text-on-surface">
+                {est.free ? <span className="text-green-700">FREE delivery</span> : <>Delivery ₹{est.charge}</>}
+                {!est.free && (est.sellerPct ?? 0) > 0 && est.fullCharge
+                  ? <span className="ml-1 text-xs font-normal text-on-surface-variant line-through">₹{est.fullCharge}</span>
+                  : null}
+                {est.deliveryBy && <> by <span className="text-green-700">{formatDeliveryDate(est.deliveryBy)}</span></>}
+              </span>
+              {!est.free && (est.sellerPct ?? 0) > 0 && (
+                <span className="text-xs text-green-700">The store pays {est.sellerPct}% of your delivery</span>
+              )}
+              {!est.free && est.freeAbove ? (
+                <span className="text-xs text-on-surface-variant">
+                  FREE delivery on orders of ₹{est.freeAbove.toLocaleString("en-IN")}+ from this store
+                </span>
+              ) : null}
+            </>
           ) : (
             <span className="text-xs text-on-surface-variant">
               Courier delivery isn&apos;t available to this pincode; the store will tell you the delivery charge.

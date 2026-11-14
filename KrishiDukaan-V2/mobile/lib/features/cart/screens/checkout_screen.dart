@@ -854,6 +854,34 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                             ),
                           ),
                         ),
+                      if ((_quote?.storesCover ?? 0) > 0)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'The store pays ${CurrencyUtils.format(_quote!.storesCover)} of your delivery',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_quote?.freeAbove != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'Free delivery: your order reached the store\'s ${CurrencyUtils.format(_quote!.freeAbove!)} offer',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                       if (_quote?.couriers.isNotEmpty ?? false)
                         Align(
                           alignment: Alignment.centerLeft,

@@ -49,6 +49,8 @@ export interface ProductDoc {
   extraDeliveryCharge?: number;
   /** When true, this product ships free — it adds no weight/charge to the seller's delivery fee. */
   freeDelivery?: boolean;
+  /** Seller pays this % (1–99) of this product's delivery, the buyer the rest (lib/free-delivery). */
+  sellerDeliveryPct?: number;
 
   /** Category-specific structured information (new schema). */
   categoryInfo?: Record<string, string | string[]>;
@@ -169,6 +171,8 @@ export interface InventoryRow {
   extraDeliveryCharge: number;
   /** When true, this product ships free — it adds no weight/charge to the seller's delivery fee. */
   freeDelivery: boolean;
+  /** Seller pays this % (1–99) of this product's delivery, the buyer the rest (lib/free-delivery). */
+  sellerDeliveryPct?: number;
 
   // ── Lifecycle / ownership ───────────────────────────────────────────────────
   isActive: boolean;

@@ -1,3 +1,4 @@
+import { freeDeliveryAbove, offerPct } from "../../lib/free-delivery";
 import {
   doc,
   getDoc,
@@ -43,6 +44,8 @@ export async function fetchDeliverySettings(
       outStateSlabs: slabsFromData(d.outStateSlabs),
       sellerState: String(d.sellerState ?? ""),
       storeFreeDelivery: d.storeFreeDelivery === true,
+      storeDeliveryPct: d.storeFreeDelivery === true ? 0 : offerPct(d.storeDeliveryPct),
+      freeDeliveryAbove: freeDeliveryAbove(d),
       networkFreeDelivery: d.networkFreeDelivery === true,
       updatedAt: (d.updatedAt as DeliverySettings["updatedAt"]) ?? null,
     };
@@ -62,6 +65,8 @@ export async function saveDeliverySettings(
     outStateSlabs: WeightSlab[];
     sellerState: string;
     storeFreeDelivery?: boolean;
+    storeDeliveryPct?: number;
+    freeDeliveryAbove?: number;
     networkFreeDelivery?: boolean;
   },
 ): Promise<void> {
@@ -87,6 +92,10 @@ export async function saveDeliverySettings(
       // never switches an offer off.
       ...(settings.storeFreeDelivery !== undefined ? { storeFreeDelivery: settings.storeFreeDelivery } : {}),
       ...(settings.networkFreeDelivery !== undefined ? { networkFreeDelivery: settings.networkFreeDelivery } : {}),
+      ...(settings.storeDeliveryPct !== undefined
+        ? { storeDeliveryPct: settings.storeFreeDelivery ? 0 : offerPct(settings.storeDeliveryPct) } : {}),
+      ...(settings.freeDeliveryAbove !== undefined
+        ? { freeDeliveryAbove: freeDeliveryAbove({ freeDeliveryAbove: settings.freeDeliveryAbove }) } : {}),
       updatedAt: now,
     },
     { merge: true },

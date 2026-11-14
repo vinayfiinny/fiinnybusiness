@@ -77,14 +77,16 @@ class _DeliveryEstimateBoxState extends State<DeliveryEstimateBox> {
     final id = ++_request;
     setState(() => _loading = true);
     try {
-      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/delivery/estimate').replace(
-        queryParameters: {
-          'productId': widget.productId,
-          'pincode': _pincode,
-          if ((widget.sellerPhone ?? '').isNotEmpty) 'seller': widget.sellerPhone!,
-          if ((widget.size ?? '').isNotEmpty) 'size': widget.size!,
-        },
-      );
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/delivery/estimate')
+          .replace(
+            queryParameters: {
+              'productId': widget.productId,
+              'pincode': _pincode,
+              if ((widget.sellerPhone ?? '').isNotEmpty)
+                'seller': widget.sellerPhone!,
+              if ((widget.size ?? '').isNotEmpty) 'size': widget.size!,
+            },
+          );
       final res = await http.get(uri).timeout(const Duration(seconds: 20));
       final body = res.statusCode == 200 ? jsonDecode(res.body) : null;
       if (!mounted || id != _request) return;
@@ -111,7 +113,10 @@ class _DeliveryEstimateBoxState extends State<DeliveryEstimateBox> {
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Check'),
@@ -135,8 +140,10 @@ class _DeliveryEstimateBoxState extends State<DeliveryEstimateBox> {
 
     Widget line;
     if (_pincode.isEmpty) {
-      line = Text('Enter your pincode to see the delivery date',
-          style: AppTextStyles.bodySmall);
+      line = Text(
+        'Enter your pincode to see the delivery date',
+        style: AppTextStyles.bodySmall,
+      );
     } else if (_loading) {
       line = Text('Checking delivery…', style: AppTextStyles.bodySmall);
     } else if (est == null) {
@@ -145,20 +152,44 @@ class _DeliveryEstimateBoxState extends State<DeliveryEstimateBox> {
       final free = est['free'] == true;
       final date = formatDeliveryDate(est['deliveryBy']?.toString());
       final charge = (est['charge'] as num?)?.round() ?? 0;
-      line = Text.rich(
-        TextSpan(
-          style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-          children: [
+      final sellerPct = (est['sellerPct'] as num?)?.round() ?? 0;
+      final freeAbove = (est['freeAbove'] as num?)?.round();
+      line = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
             TextSpan(
-              text: free ? 'FREE delivery' : 'Delivery ₹$charge',
-              style: free ? const TextStyle(color: AppColors.success) : null,
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              children: [
+                TextSpan(
+                  text: free ? 'FREE delivery' : 'Delivery ₹$charge',
+                  style: free
+                      ? const TextStyle(color: AppColors.success)
+                      : null,
+                ),
+                if (date != null) ...[
+                  const TextSpan(text: ' by '),
+                  TextSpan(
+                    text: date,
+                    style: const TextStyle(color: AppColors.success),
+                  ),
+                ],
+              ],
             ),
-            if (date != null) ...[
-              const TextSpan(text: ' by '),
-              TextSpan(text: date, style: const TextStyle(color: AppColors.success)),
-            ],
-          ],
-        ),
+          ),
+          if (!free && sellerPct > 0)
+            Text(
+              'The store pays $sellerPct% of your delivery',
+              style: AppTextStyles.caption.copyWith(color: AppColors.success),
+            ),
+          if (!free && freeAbove != null && freeAbove > 0)
+            Text(
+              'FREE delivery on orders of ₹$freeAbove+ from this store',
+              style: AppTextStyles.caption,
+            ),
+        ],
       );
     } else {
       line = Text(
@@ -176,7 +207,11 @@ class _DeliveryEstimateBoxState extends State<DeliveryEstimateBox> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.local_shipping_outlined, size: 20, color: AppColors.primary),
+          const Icon(
+            Icons.local_shipping_outlined,
+            size: 20,
+            color: AppColors.primary,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

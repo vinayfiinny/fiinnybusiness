@@ -778,6 +778,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
   bool _gstIncluded = true;
   bool _freeDelivery = false;
   final _extraDeliveryCtrl = TextEditingController();
+  final _sharePctCtrl = TextEditingController();
   // Matches web's add-product-inventory-form.tsx exactly: "New products
   // default to offline; seller opts in when account delivery is enabled."
   // This used to default to 'online_delivery', so every product added from
@@ -827,7 +828,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
   String _snapshot() => [
         _nameCtrl.text, _descCtrl.text, _priceCtrl.text, _stockCtrl.text,
         _addressCtrl.text, _customUnitCtrl.text, _customSizeCtrl.text,
-        _extraDeliveryCtrl.text, _selectedCatalog?.id, _category,
+        _extraDeliveryCtrl.text, _sharePctCtrl.text, _selectedCatalog?.id, _category,
         _selectedUnit, _selectedSize, _gstApplicable, _gstRate, _gstIncluded,
         _freeDelivery, _sellMode, _videoUrl, _categoryInfo, _composition,
         _customFields,
@@ -856,6 +857,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
     _customUnitCtrl.dispose();
     _customSizeCtrl.dispose();
     _extraDeliveryCtrl.dispose();
+    _sharePctCtrl.dispose();
     super.dispose();
   }
 
@@ -1389,6 +1391,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
                     gstIncluded: _gstIncluded,
                     freeDelivery: _freeDelivery,
                     extraDeliveryCtrl: _extraDeliveryCtrl,
+                    sharePctCtrl: _sharePctCtrl,
                     price: double.tryParse(_priceCtrl.text.trim()) ?? 0,
                     onGstApplicable: (v) => setState(() => _gstApplicable = v),
                     onGstRate: (v) => setState(() => _gstRate = v),
@@ -1639,6 +1642,7 @@ class _AddListingSheetState extends ConsumerState<_AddListingSheet> {
         gstRate: _gstApplicable ? _gstRate : 0.0,
         gstIncluded: _gstIncluded,
         freeDelivery: _freeDelivery,
+        sellerDeliveryPct: _freeDelivery ? 0 : GstDeliveryFields.parseSharePct(_sharePctCtrl.text),
         extraDeliveryCharge: GstDeliveryFields.parseExtra(_extraDeliveryCtrl.text),
         // Drop empty values so a product never carries a blank map/array.
         categoryInfo: Map<String, dynamic>.fromEntries(
@@ -1724,6 +1728,7 @@ class _EditListingSheetState extends State<_EditListingSheet> {
   bool _gstIncluded = true;
   bool _freeDelivery = false;
   late final TextEditingController _extraDeliveryCtrl;
+  late final TextEditingController _sharePctCtrl;
   String _sellMode = 'online_delivery';
   bool _saving = false;
 
@@ -1764,6 +1769,9 @@ class _EditListingSheetState extends State<_EditListingSheet> {
     _gstRate = (widget.listing.gstRate ?? 0) > 0 ? widget.listing.gstRate! : 18.0;
     _gstIncluded = widget.listing.gstIncluded;
     _freeDelivery = widget.listing.freeDelivery;
+    _sharePctCtrl = TextEditingController(
+      text: widget.listing.sellerDeliveryPct > 0 ? '${widget.listing.sellerDeliveryPct}' : '',
+    );
     _extraDeliveryCtrl = TextEditingController(
       text: widget.listing.extraDeliveryCharge > 0
           ? widget.listing.extraDeliveryCharge.toString().replaceFirst(RegExp(r'\.0$'), '')
@@ -1809,7 +1817,7 @@ class _EditListingSheetState extends State<_EditListingSheet> {
   late final String _initialSnapshot;
   String _snapshot() => [
         _priceCtrl.text, _stockCtrl.text, _lowStockCtrl.text,
-        _extraDeliveryCtrl.text, _isActive, _gstApplicable, _gstRate,
+        _extraDeliveryCtrl.text, _sharePctCtrl.text, _isActive, _gstApplicable, _gstRate,
         _gstIncluded, _freeDelivery, _sellMode, _discountActive, _discountPct,
         for (final v in _variants)
           '${v.labelCtrl.text}|${v.priceCtrl.text}|${v.stockCtrl.text}',
@@ -1831,6 +1839,7 @@ class _EditListingSheetState extends State<_EditListingSheet> {
     _stockCtrl.dispose();
     _lowStockCtrl.dispose();
     _extraDeliveryCtrl.dispose();
+    _sharePctCtrl.dispose();
     for (final v in _variants) {
       v.dispose();
     }
@@ -1918,6 +1927,7 @@ class _EditListingSheetState extends State<_EditListingSheet> {
                 gstIncluded: _gstIncluded,
                 freeDelivery: _freeDelivery,
                 extraDeliveryCtrl: _extraDeliveryCtrl,
+                sharePctCtrl: _sharePctCtrl,
                 price: double.tryParse(_priceCtrl.text.trim()) ?? 0,
                 discountPct: _discountActive ? _discountPct : 0,
                 onGstApplicable: (v) => setState(() => _gstApplicable = v),
@@ -2288,6 +2298,9 @@ class _EditListingSheetState extends State<_EditListingSheet> {
         // and Free Delivery zeroes the extra charge.
         'gstIncluded': effectiveGstApplicable ? _gstIncluded : false,
         'freeDelivery': accountGateOpen && _freeDelivery,
+        'sellerDeliveryPct': (accountGateOpen && !_freeDelivery)
+            ? GstDeliveryFields.parseSharePct(_sharePctCtrl.text)
+            : 0,
         'extraDeliveryCharge': (accountGateOpen && !_freeDelivery)
             ? GstDeliveryFields.parseExtra(_extraDeliveryCtrl.text)
             : 0.0,
@@ -2324,6 +2337,9 @@ class _EditListingSheetState extends State<_EditListingSheet> {
           gstIncluded: _gstIncluded,
           extraDeliveryCharge: GstDeliveryFields.parseExtra(_extraDeliveryCtrl.text),
           freeDelivery: accountGateOpen && _freeDelivery,
+          sellerDeliveryPct: (accountGateOpen && !_freeDelivery)
+              ? GstDeliveryFields.parseSharePct(_sharePctCtrl.text)
+              : 0,
         );
       }
 

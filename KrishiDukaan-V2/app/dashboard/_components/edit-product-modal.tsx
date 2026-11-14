@@ -26,6 +26,7 @@ import { CompositionEditor, COMPOSITION_CATEGORIES, type CompositionEntry } from
 import { CustomFieldsEditor, type CustomFieldEntry } from "../_components/custom-fields-editor";
 import { ProductLicenceSection } from "./product-licence-section";
 import { licenceComplete, type ProductLicence } from "../../lib/product-licence";
+import { offerPct } from "../../lib/free-delivery";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -463,6 +464,18 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
     row.extraDeliveryCharge && row.extraDeliveryCharge > 0 ? String(row.extraDeliveryCharge) : "",
   );
   const [freeDelivery, setFreeDelivery] = useState<boolean>(row.freeDelivery ?? false);
+  // Share offer: the seller pays this % of the product's delivery (lib/free-delivery).
+  const [sharePct, setSharePct] = useState<string>(
+    !row.freeDelivery && (row.sellerDeliveryPct ?? 0) > 0 ? String(row.sellerDeliveryPct) : "",
+  );
+  const [shareOn, setShareOn] = useState<boolean>(!row.freeDelivery && (row.sellerDeliveryPct ?? 0) > 0);
+  const deliveryOffer: "none" | "share" | "free" = freeDelivery ? "free" : shareOn ? "share" : "none";
+  const setDeliveryOffer = (v: "none" | "share" | "free") => {
+    setFreeDelivery(v === "free");
+    setShareOn(v === "share");
+    if (v === "share" && !sharePct) setSharePct("50");
+  };
+  const sharePctNum = shareOn ? offerPct(sharePct) : 0;
 
   // Seller's global weight-slab delivery settings — used to preview the delivery
   // charge for each pack size. Fetched once from deliverySettings/{phone}.
@@ -515,7 +528,7 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
   // Unsaved changes: everything the form edits, compared with how it opened.
   const snapshot = JSON.stringify([
     name, category, customCategory, description, variants, images.map((im) => im.url),
-    gstApplicable, gstRate, gstIncluded, sellMode, extraDeliveryCharge, freeDelivery,
+    gstApplicable, gstRate, gstIncluded, sellMode, extraDeliveryCharge, freeDelivery, shareOn, sharePct,
     videoUrl, composition, customFields, categoryInfo,
   ]);
   const initialSnapshot = useRef(snapshot);
@@ -617,6 +630,11 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
     // Free delivery / extra charge only apply to online-delivery products.
     const deliveryConfigurable = accountDeliveryEnabled !== false && effectiveSellMode === "online_delivery";
     const effectiveFreeDelivery = deliveryConfigurable ? freeDelivery : false;
+    if (deliveryConfigurable && shareOn && !sharePctNum) {
+      setMessage({ type: "err", text: "Enter the part of delivery you will pay, from 1 to 99%." });
+      return;
+    }
+    const effectiveSharePct = deliveryConfigurable && !effectiveFreeDelivery ? sharePctNum : 0;
     // A free-delivery product carries no extra charge.
     const parsedExtraDelivery =
       deliveryConfigurable && !effectiveFreeDelivery
@@ -654,6 +672,7 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
         gstIncluded: effectiveGstApplicable ? gstIncluded : false,
         extraDeliveryCharge: parsedExtraDelivery,
         freeDelivery: effectiveFreeDelivery,
+        sellerDeliveryPct: effectiveSharePct,
         ...(isManufacturerOwn && licenceTouched
           ? { license: licence && (licence.states.length > 0 || licence.file) ? licence : null }
           : {}),
@@ -771,7 +790,10 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
     gstIncluded,
   });
   const baseGstAmount = pricing.gstPerUnit;
-  const baseDelivery = sellMode === "online_delivery" ? (base?.total ?? 0) : 0;
+  // What the BUYER pays for delivery: the full charge less the seller's share offer.
+  const baseDelivery = sellMode === "online_delivery"
+    ? Number(((base?.total ?? 0) * (1 - sharePctNum / 100)).toFixed(2))
+    : 0;
   const baseFinal = Number((pricing.lineTotal + baseDelivery).toFixed(2));
   const rupee = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -1055,24 +1077,47 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
                     </NextLink>
                   </div>
 
-                  {/* Free Delivery toggle */}
-                  <div className="flex items-center justify-between gap-2 border-t border-outline-variant/15 pt-3">
-                    <div>
-                      <p className="text-sm font-medium text-on-surface">Free Delivery</p>
-                      <p className="text-xs text-on-surface-variant mt-0.5">Ship this product free — buyers pay ₹0 delivery for it.</p>
+                  {/* Delivery offer: buyer pays / share it / free (lib/free-delivery) */}
+                  <div className="flex flex-col gap-2 border-t border-outline-variant/15 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-on-surface">Delivery offer</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">Who pays this product&apos;s delivery.</p>
+                      </div>
+                      <div className="flex rounded-lg border border-outline-variant/30 overflow-hidden text-xs font-semibold">
+                        {([["none", "Buyer pays"], ["share", "Share"], ["free", "Free"]] as const).map(([v, label]) => (
+                          <button key={v} type="button" disabled={saving}
+                            onClick={() => setDeliveryOffer(v)}
+                            className={`px-3 py-1.5 transition-colors disabled:opacity-50 ${
+                              deliveryOffer === v ? "bg-primary text-white" : "text-on-surface-variant hover:bg-surface-container"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex rounded-lg border border-outline-variant/30 overflow-hidden text-xs font-semibold">
-                      {([true, false] as const).map((v) => (
-                        <button key={String(v)} type="button" disabled={saving}
-                          onClick={() => setFreeDelivery(v)}
-                          className={`px-3 py-1.5 transition-colors disabled:opacity-50 ${
-                            freeDelivery === v ? "bg-primary text-white" : "text-on-surface-variant hover:bg-surface-container"
-                          }`}
-                        >
-                          {v ? "Yes" : "No"}
-                        </button>
-                      ))}
-                    </div>
+                    {deliveryOffer === "share" && (
+                      <label className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-medium text-on-surface">I pay</span>
+                        <input
+                          type="text" inputMode="numeric" disabled={saving}
+                          value={sharePct}
+                          onChange={(e) => setSharePct(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                          className="w-16 rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-3 py-1.5 text-sm outline-none focus:border-primary"
+                        />
+                        <span className="font-medium text-on-surface">% of the delivery charge; the buyer pays the rest.</span>
+                        <span className="w-full text-[10px] text-on-surface-variant">
+                          On courier orders your part is taken from your payout after the courier is booked
+                          (never more than the courier really charged), then commission applies.
+                        </span>
+                      </label>
+                    )}
+                    {deliveryOffer === "free" && (
+                      <span className="text-[10px] text-on-surface-variant">
+                        On courier orders the delivery cost is taken from your payout after the courier is booked.
+                      </span>
+                    )}
                   </div>
 
                   {freeDelivery ? (
@@ -1298,7 +1343,9 @@ export function EditProductModal({ row, accountDeliveryEnabled, onClose, onSaved
                       <span className="font-semibold">
                         {freeDelivery
                           ? <span className="text-primary">Free</span>
-                          : base && (base.weightKg > 0 || extraDeliveryNum > 0) ? `+ ${rupee(baseDelivery)}` : "—"}
+                          : base && (base.weightKg > 0 || extraDeliveryNum > 0)
+                            ? <>+ {rupee(baseDelivery)}{sharePctNum > 0 && <span className="text-primary"> (you pay {sharePctNum}%)</span>}</>
+                            : "—"}
                       </span>
                     </div>
                   )}

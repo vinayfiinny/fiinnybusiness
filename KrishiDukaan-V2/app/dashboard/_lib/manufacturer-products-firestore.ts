@@ -1,3 +1,4 @@
+import { offerPct } from "../../lib/free-delivery";
 import {
   collection,
   doc,
@@ -54,6 +55,8 @@ export type ManufacturerProductInput = {
   extraDeliveryCharge?: number;
   /** When true, this product ships free — it adds no weight/charge to the seller's delivery fee. */
   freeDelivery?: boolean;
+  /** Seller pays this % (1–99) of this product's delivery, the buyer the rest (lib/free-delivery). */
+  sellerDeliveryPct?: number;
   /** Whether this product is available for online home delivery. Defaults to online_delivery. */
   sellMode?: "online_delivery" | "offline_store_only";
   /**
@@ -150,6 +153,7 @@ export async function createManufacturerProduct(
     // Delivery — per-product surcharge on top of the global weight-slab charge
     extraDeliveryCharge: input.extraDeliveryCharge ?? 0,
     freeDelivery: input.freeDelivery ?? false,
+    sellerDeliveryPct: input.freeDelivery ? 0 : offerPct(input.sellerDeliveryPct),
     // Note: legacy fertilizer flat fields (nitrogen, phosphorus, etc.) are no longer
     // written here — category-specific data lives in categoryInfo only.
   });
@@ -306,6 +310,9 @@ export async function updateManufacturerProduct(
   }
   if (input.freeDelivery !== undefined) {
     patch.freeDelivery = input.freeDelivery;
+  }
+  if (input.sellerDeliveryPct !== undefined || input.freeDelivery === true) {
+    patch.sellerDeliveryPct = input.freeDelivery === true ? 0 : offerPct(input.sellerDeliveryPct);
   }
   if (input.license !== undefined) {
     patch.license = input.license ? licenceForSave(input.license) : null;

@@ -249,7 +249,13 @@ class DeliveryBreakdown {
         waived: (m['waived'] as num?)?.toDouble() ?? 0,
         type: DeliveryType.parse(m['deliveryType']),
         courierFields: {
-          for (final k in const ['mode', 'courier', 'sellerPaysCourier'])
+          for (final k in const [
+            'mode',
+            'courier',
+            'sellerPaysCourier',
+            'sellerCovers',
+            'freeAboveApplied',
+          ])
             if (m[k] != null) k: m[k],
         },
       );

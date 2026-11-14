@@ -1,3 +1,4 @@
+import { offerPct } from "../../lib/free-delivery";
 import {
   arrayRemove,
   arrayUnion,
@@ -129,6 +130,7 @@ export async function assignProductToRetailer(
     gstIncluded: src.gstIncluded !== false, // default included (business rule)
     extraDeliveryCharge: typeof src.extraDeliveryCharge === "number" ? src.extraDeliveryCharge : 0,
     freeDelivery: src.freeDelivery === true,
+    sellerDeliveryPct: src.freeDelivery === true ? 0 : offerPct(src.sellerDeliveryPct),
     composition: Array.isArray(src.composition) ? src.composition : null,
     benefits: Array.isArray(src.benefits) ? src.benefits : null,
     application: src.application ? String(src.application) : null,
@@ -485,6 +487,7 @@ export async function bulkAssignProductsToRetailer(
       gstIncluded: src.gstIncluded !== false, // default included (business rule)
       extraDeliveryCharge: typeof src.extraDeliveryCharge === "number" ? src.extraDeliveryCharge : 0,
       freeDelivery: src.freeDelivery === true,
+      sellerDeliveryPct: src.freeDelivery === true ? 0 : offerPct(src.sellerDeliveryPct),
       composition: Array.isArray(src.composition) ? src.composition : null,
       benefits: Array.isArray(src.benefits) ? src.benefits : null,
       application: src.application ? String(src.application) : null,

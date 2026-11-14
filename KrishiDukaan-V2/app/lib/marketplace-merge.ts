@@ -82,6 +82,8 @@ export function mapMarketplaceDoc(
       ? data.extraDeliveryCharge
       : undefined,
     freeDelivery: data.freeDelivery === true ? true : undefined,
+    sellerDeliveryPct: data.freeDelivery !== true && typeof data.sellerDeliveryPct === "number"
+      && data.sellerDeliveryPct >= 1 && data.sellerDeliveryPct <= 99 ? Math.round(data.sellerDeliveryPct) : undefined,
     averageRating: typeof data.averageRating === "number" ? data.averageRating : undefined,
     totalReviews: typeof data.totalReviews === "number" ? data.totalReviews : undefined,
     categoryInfo: (data.categoryInfo && typeof data.categoryInfo === "object" && !Array.isArray(data.categoryInfo))
@@ -282,6 +284,8 @@ function sellerCommercial(p: MarketplaceProduct) {
     ...(p.gstApplicable === true ? { gstIncluded: p.gstIncluded !== false } : {}),
     ...(typeof p.extraDeliveryCharge === "number" && p.extraDeliveryCharge > 0 ? { extraDeliveryCharge: p.extraDeliveryCharge } : {}),
     ...(p.freeDelivery === true ? { freeDelivery: true } : {}),
+    ...(p.freeDelivery !== true && typeof p.sellerDeliveryPct === "number" && p.sellerDeliveryPct > 0
+      ? { sellerDeliveryPct: p.sellerDeliveryPct } : {}),
   };
 }
 

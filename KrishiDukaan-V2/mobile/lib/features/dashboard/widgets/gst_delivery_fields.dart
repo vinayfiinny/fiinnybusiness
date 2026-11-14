@@ -1,3 +1,4 @@
+import '../../../core/utils/delivery_offer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -33,6 +34,7 @@ class GstDeliveryFields extends StatelessWidget {
     required this.onGstRate,
     required this.onGstIncluded,
     required this.onFreeDelivery,
+    this.sharePctCtrl,
     this.price = 0,
     this.discountPct = 0,
     this.enabled = true,
@@ -48,12 +50,19 @@ class GstDeliveryFields extends StatelessWidget {
   final ValueChanged<bool> onGstIncluded;
   final ValueChanged<bool> onFreeDelivery;
 
+  /// Share offer (optional): "I pay __% of this product's delivery". Blank =
+  /// buyer pays all. Hidden while Free Delivery is on.
+  final TextEditingController? sharePctCtrl;
+
   /// The price the seller entered (before discount), for the breakdown.
   final double price;
   final double discountPct;
   final bool enabled;
 
   bool get _isPreset => gstRates.contains(gstRate.toInt()) && gstRate == gstRate.roundToDouble();
+
+  /// Parses the share-offer text: 1–99, else 0.
+  static int parseSharePct(String text) => GstDeliveryOffer.parsePct(text);
 
   /// Parses the extra-delivery text: blank / invalid / negative → 0.
   static double parseExtra(String text) {
@@ -173,6 +182,33 @@ class GstDeliveryFields extends StatelessWidget {
                 activeThumbColor: AppColors.primary,
                 onChanged: enabled ? onFreeDelivery : null,
               ),
+              if (!freeDelivery && sharePctCtrl != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: TextFormField(
+                    controller: sharePctCtrl,
+                    enabled: enabled,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    validator: (v) => (v ?? '').trim().isEmpty ||
+                            parseSharePct(v!) > 0
+                        ? null
+                        : 'Enter 1 to 99, or leave empty',
+                    decoration: InputDecoration(
+                      labelText: 'Share delivery: I pay (%)',
+                      helperText:
+                          'Optional. You pay this part of the delivery, the buyer the rest. '
+                          'On courier orders it is taken from your payout after booking.',
+                      helperMaxLines: 3,
+                      suffixText: '%',
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
               if (!freeDelivery)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),

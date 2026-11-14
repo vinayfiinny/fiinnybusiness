@@ -1,3 +1,4 @@
+import { offerPct } from "../../lib/free-delivery";
 import {
   arrayUnion,
   collection,
@@ -142,6 +143,7 @@ function mapProduct(id: string, data: Record<string, unknown>): ProductDoc {
       ? data.extraDeliveryCharge
       : 0,
     freeDelivery: data.freeDelivery === true,
+    sellerDeliveryPct: data.freeDelivery === true ? 0 : offerPct(data.sellerDeliveryPct),
   };
 }
 
@@ -460,6 +462,7 @@ export async function fetchRetailerInventoryRows(
         gstIncluded: p.gstIncluded ?? true, // default included (business rule)
         extraDeliveryCharge: p.extraDeliveryCharge ?? 0,
         freeDelivery: p.freeDelivery ?? false,
+        sellerDeliveryPct: p.sellerDeliveryPct ?? 0,
         assignedByManufacturer: inv.assignedByManufacturer === true,
         source: p.source ?? "retailer_inventory",
         ownerId: p.ownerId,
@@ -576,6 +579,7 @@ export async function fetchManufacturerCatalogueRows(
       gstIncluded: p.gstIncluded ?? true, // default included (business rule)
       extraDeliveryCharge: p.extraDeliveryCharge ?? 0,
       freeDelivery: p.freeDelivery ?? false,
+      sellerDeliveryPct: p.sellerDeliveryPct ?? 0,
       assignedByManufacturer: false,
       source: p.source ?? "manufacturer_inventory",
       ownerId: p.ownerId,
@@ -708,6 +712,8 @@ export type AddProductInventoryInput = {
   extraDeliveryCharge?: number;
   /** When true, this product ships free — it adds no weight/charge to the seller's delivery fee. */
   freeDelivery?: boolean;
+  /** Seller pays this % (1–99) of this product's delivery, the buyer the rest (lib/free-delivery). */
+  sellerDeliveryPct?: number;
   /** @deprecated Legacy fertilizer flat fields. */
   nitrogen?: string;
   phosphorus?: string;
@@ -809,6 +815,7 @@ export async function createProductAndInventory(
     // Delivery — per-product surcharge on top of the global weight-slab charge
     extraDeliveryCharge: input.extraDeliveryCharge ?? 0,
     freeDelivery: input.freeDelivery ?? false,
+    sellerDeliveryPct: input.freeDelivery ? 0 : offerPct(input.sellerDeliveryPct),
     // Legacy fertilizer flat fields omitted — categoryInfo is the source of truth.
   });
 

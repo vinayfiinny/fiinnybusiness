@@ -47,6 +47,7 @@
  * unrelated records.
  */
 
+import { lineDeliveryShare, type FreeDeliverySettings } from './free-delivery';
 import Razorpay from 'razorpay';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebase-admin';
@@ -253,6 +254,8 @@ export async function priceManualOrder(
       gstIncluded: commercial.gstIncluded,
       extraDeliveryCharge: commercial.extraDeliveryCharge,
       freeDelivery: commercial.freeDelivery,
+      // Product share offer; the store's own offer is added below.
+      deliveryShare: commercial.sellerDeliveryPct / 100,
     });
   }
 
@@ -262,6 +265,14 @@ export async function priceManualOrder(
     settings = snap.exists ? (snap.data() as DeliverySettingsLike) : null;
   } catch {
     settings = null;
+  }
+  // The store's delivery offer (free or a %), same as checkout (lib/free-delivery).
+  for (const l of pricingLines) {
+    l.deliveryShare = lineDeliveryShare({
+      productFree: l.freeDelivery === true,
+      productPct: Math.round((l.deliveryShare ?? 0) * 100),
+      seller: settings as FreeDeliverySettings,
+    });
   }
 
   const sp = computeSellerPricing(sellerPhone, pricingLines, settings, customerDeliveryState ?? null);

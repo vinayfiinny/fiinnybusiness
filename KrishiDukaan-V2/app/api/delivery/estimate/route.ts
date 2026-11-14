@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "../../../lib/firebase-admin";
 import { cheapestQuote, courierCheckoutEnabled, parcelKgFor, pickupPincodeFor } from "../../../lib/courier-quote";
 import { deliveryByDate } from "../../../lib/delivery-eta";
-import { isFreeDelivery, manufacturerPhoneOf } from "../../../lib/free-delivery";
+import { freeDeliveryAbove, lineDeliveryShare, manufacturerPhoneOf, offerPct } from "../../../lib/free-delivery";
 import { parseVariantWeightKg } from "../../../utils/weight";
 
 /**
  * GET /api/delivery/estimate?productId=…&pincode=…&seller=…&size=…
- *   → { enabled, available, free, charge, carrier, service, etaDays, deliveryBy }
+ *   → { enabled, available, free, charge, fullCharge, sellerPct, freeAbove,
+ *       carrier, service, etaDays, deliveryBy }
  *
  * The "Deliver to 411062 — FREE delivery by Thu, 19 Nov" line on the product
  * page (web and app). Same rules as checkout (create-cart-order): the cheapest
@@ -74,21 +75,35 @@ export async function GET(req: NextRequest) {
   const size = String(q.get("size") ?? "").trim() || String(product.unit ?? variants[0]?.unit ?? variants[0]?.label ?? "");
   const kg = parcelKgFor([{ qty: 1, weightKg: parseVariantWeightKg(size) }]);
   const price = Number(copy?.price ?? product.price ?? 0);
-  const free = isFreeDelivery({
-    productFree: (copy?.freeDelivery ?? product.freeDelivery) === true,
-    seller: sellerSettings,
-    manufacturer: makerSettings,
-  });
+  // Same offers as checkout (lib/free-delivery): the store's own copy's
+  // settings win over the canonical product's.
+  const src = copy && (copy.freeDelivery !== undefined || copy.sellerDeliveryPct !== undefined) ? copy : product;
+  const above = freeDeliveryAbove(sellerSettings);
+  const share = above > 0 && price >= above
+    ? 1
+    : lineDeliveryShare({
+      productFree: src.freeDelivery === true,
+      productPct: offerPct(src.sellerDeliveryPct),
+      seller: sellerSettings,
+      manufacturer: makerSettings,
+    });
+  const free = share >= 1;
 
   const quote = await cheapestQuote(pickup, pincode, kg, price);
-  if (!quote) return NextResponse.json({ enabled: true, available: false, free });
+  if (!quote) return NextResponse.json({ enabled: true, available: false, free, freeAbove: above || null });
+  const full = Math.ceil(quote.cost);
 
   return NextResponse.json(
     {
       enabled: true,
       available: true,
       free,
-      charge: free ? 0 : Math.ceil(quote.cost),
+      charge: free ? 0 : Math.round(full * (1 - share)),
+      fullCharge: full,
+      // The store pays this % of delivery (share offers); 0 or 100 otherwise.
+      sellerPct: Math.round(share * 100),
+      // "FREE delivery on orders of ₹5,000+ from this store"
+      freeAbove: above || null,
       carrier: quote.carrier,
       service: quote.service,
       etaDays: quote.etaDays ?? null,

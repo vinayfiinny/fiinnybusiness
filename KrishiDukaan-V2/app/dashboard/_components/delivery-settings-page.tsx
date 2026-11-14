@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useEffectiveUser } from "../_context/effective-user-context";
+import { offerPct } from "../../lib/free-delivery";
 import {
   Globe, MapPin, Weight, Plus, Trash2, Save, Truck,
   Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, Info, Lock,
@@ -380,8 +381,18 @@ export function DeliverySettingsPage() {
   // is set per product by its licence (Inventory → Edit → Selling licence),
   // so they always use the pan-India within/outside-state slabs.
   const [isManufacturer, setIsManufacturer] = useState(false);
+  // Store-wide delivery offer (lib/free-delivery): buyer pays / store pays a % / free.
   const [freeDelivery, setFreeDelivery] = useState(false);
+  const [storeSharePct, setStoreSharePct] = useState("");
+  const [storeShareOn, setStoreShareOn] = useState(false);
+  const [freeAbove, setFreeAbove] = useState("");
   const [networkFreeDelivery, setNetworkFreeDelivery] = useState(false);
+  const storeOffer: "none" | "share" | "free" = freeDelivery ? "free" : storeShareOn ? "share" : "none";
+  const setStoreOffer = (v: "none" | "share" | "free") => {
+    setFreeDelivery(v === "free");
+    setStoreShareOn(v === "share");
+    if (v === "share" && !storeSharePct) setStoreSharePct("50");
+  };
   const [coverageType, setCoverageType] = useState<CoverageType>("pan_india");
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
 
@@ -410,6 +421,9 @@ export function DeliverySettingsPage() {
           if (settings) {
             setStoredOnlineDeliveryEnabled(settings.onlineDeliveryEnabled);
             setFreeDelivery(settings.storeFreeDelivery === true);
+            setStoreShareOn((settings.storeDeliveryPct ?? 0) > 0);
+            setStoreSharePct((settings.storeDeliveryPct ?? 0) > 0 ? String(settings.storeDeliveryPct) : "");
+            setFreeAbove((settings.freeDeliveryAbove ?? 0) > 0 ? String(settings.freeDeliveryAbove) : "");
             setNetworkFreeDelivery(settings.networkFreeDelivery === true);
             setSlabs(settings.weightSlabs);
             // Legacy pan-India docs carry only weightSlabs — seed the in-state
@@ -446,7 +460,8 @@ export function DeliverySettingsPage() {
   const coverageInvalid =
     coverageType === "states" && selectedStates.length === 0;
 
-  const canSave = !hasSlabErrors && !coverageInvalid && !!sellerPhone;
+  const offerInvalid = storeShareOn && !offerPct(storeSharePct);
+  const canSave = !hasSlabErrors && !coverageInvalid && !offerInvalid && !!sellerPhone;
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -465,6 +480,8 @@ export function DeliverySettingsPage() {
           outStateSlabs: outStateSlabs as WeightSlab[],
           sellerState,
           storeFreeDelivery: freeDelivery,
+          storeDeliveryPct: storeShareOn ? offerPct(storeSharePct) : 0,
+          freeDeliveryAbove: Math.max(0, Number(freeAbove) || 0),
           ...(isManufacturer ? { networkFreeDelivery } : {}),
         },
       );
@@ -477,7 +494,7 @@ export function DeliverySettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [sellerPhone, canSave, storedOnlineDeliveryEnabled, coverageType, selectedStates, slabs, inStateSlabs, outStateSlabs, sellerState, freeDelivery, networkFreeDelivery, isManufacturer, t]);
+  }, [sellerPhone, canSave, storedOnlineDeliveryEnabled, coverageType, selectedStates, slabs, inStateSlabs, outStateSlabs, sellerState, freeDelivery, storeShareOn, storeSharePct, freeAbove, networkFreeDelivery, isManufacturer, t]);
 
   // Auto-dismiss success
   useEffect(() => {
@@ -550,28 +567,66 @@ export function DeliverySettingsPage() {
         </div>
       )}
 
-      {/* ── Free delivery offer ── */}
+      {/* ── Delivery offers (lib/free-delivery) ── */}
       <Section
         icon={Truck}
-        title="Free delivery"
-        subtitle="Customers pay nothing for delivery. The courier cost is taken from your payout after the order is booked, so price it into your products."
+        title="Delivery offers"
+        subtitle="Pay all or part of your customers' delivery. On courier orders your part is taken from your payout after the courier is booked (never more than the courier really charged), then commission applies."
       >
         <div className="flex flex-col gap-4">
-          <label className="flex items-start justify-between gap-4">
-            <span>
-              <span className="block text-sm font-bold text-on-surface">Free delivery on everything I sell</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                <span className="block text-sm font-bold text-on-surface">On everything I sell</span>
+                <span className="block text-xs text-on-surface-variant">
+                  A product&apos;s own offer (set when you edit the product) is used when it is better for the buyer.
+                </span>
+              </span>
+              <div className="flex rounded-lg border border-outline-variant/30 overflow-hidden text-xs font-semibold">
+                {([["none", "Buyer pays"], ["share", "I pay part"], ["free", "Free"]] as const).map(([v, label]) => (
+                  <button key={v} type="button" disabled={saving}
+                    onClick={() => setStoreOffer(v)}
+                    className={`px-3 py-1.5 transition-colors disabled:opacity-50 ${
+                      storeOffer === v ? "bg-primary text-white" : "text-on-surface-variant hover:bg-surface-container"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {storeOffer === "share" && (
+              <label className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-on-surface">I pay</span>
+                <input
+                  type="text" inputMode="numeric" disabled={saving}
+                  value={storeSharePct}
+                  onChange={(e) => setStoreSharePct(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                  className="w-16 rounded-xl border border-outline-variant/40 bg-white px-3 py-1.5 text-sm"
+                />
+                <span className="text-on-surface">% of delivery; the buyer pays the rest.</span>
+                {offerInvalid && <span className="w-full text-xs font-semibold text-red-700">Enter 1 to 99%.</span>}
+              </label>
+            )}
+          </div>
+
+          <label className="flex flex-wrap items-center gap-2 border-t border-outline-variant/20 pt-4 text-sm">
+            <span className="w-full">
+              <span className="block font-bold text-on-surface">Free delivery on bigger orders</span>
               <span className="block text-xs text-on-surface-variant">
-                The courier cost (never more than the price shown at checkout) is deducted from your payout, then commission applies.
+                When a customer&apos;s order from your store reaches this amount (after discounts), delivery is free. Leave empty for no such offer.
               </span>
             </span>
+            <span className="text-on-surface">Free delivery from ₹</span>
             <input
-              type="checkbox"
-              checked={freeDelivery}
-              disabled={saving}
-              onChange={(e) => setFreeDelivery(e.target.checked)}
-              className="mt-1 h-5 w-5 shrink-0 accent-[#0f391b]"
+              type="text" inputMode="numeric" disabled={saving}
+              placeholder="e.g. 5000"
+              value={freeAbove}
+              onChange={(e) => setFreeAbove(e.target.value.replace(/\D/g, "").slice(0, 7))}
+              className="w-28 rounded-xl border border-outline-variant/40 bg-white px-3 py-1.5 text-sm"
             />
           </label>
+
           {isManufacturer && (
             <label className="flex items-start justify-between gap-4 border-t border-outline-variant/20 pt-4">
               <span>
@@ -589,7 +644,7 @@ export function DeliverySettingsPage() {
               />
             </label>
           )}
-          <p className="text-[11px] text-on-surface-variant">Applies to courier-delivered orders. Remember to press Save below.</p>
+          <p className="text-[11px] text-on-surface-variant">Remember to press Save below.</p>
         </div>
       </Section>
 

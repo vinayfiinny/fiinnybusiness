@@ -126,5 +126,10 @@ assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 } 
 assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 } }, null), 127);
 assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 }, reassignment: { status: "accepted" } }, 100), 0);
 assert.equal(sellerCourierShare({ deliveryBreakdown: { sellerPaysCourier: 127 }, adminReassignment: { at: "x" } }, 100), 0);
+// Share offer: customer paid 135 of a 269 quote, seller agreed 134
+assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 269), 134);
+assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 200), 65);   // courier cheaper: seller pays only the gap
+assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 120), 0);    // customer's part already covers it
+assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 400), 134);  // dearer: platform pays the excess
 
 console.log("shipping: all passed");

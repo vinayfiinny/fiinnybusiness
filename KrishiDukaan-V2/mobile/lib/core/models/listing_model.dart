@@ -1,3 +1,4 @@
+import '../utils/delivery_offer.dart';
 import 'product_licence.dart';
 import '../utils/price_display.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -61,6 +62,10 @@ class ListingModel {
 
   /// This product ships free: no weight and no delivery charge.
   final bool freeDelivery;
+
+  /// Share offer: the seller pays this % (1–99) of this product's delivery,
+  /// the buyer the rest (app/lib/free-delivery.ts on the website). 0 = none.
+  final int sellerDeliveryPct;
   final DateTime? updatedAt;
 
   /// Product-detail-page view count, bumped by `ProductDetailScreen` (and by
@@ -117,6 +122,7 @@ class ListingModel {
     this.gstIncluded = true,
     this.extraDeliveryCharge = 0,
     this.freeDelivery = false,
+    this.sellerDeliveryPct = 0,
     this.updatedAt,
     this.distanceKm,
     this.clicks = 0,
@@ -226,6 +232,9 @@ class ListingModel {
         return n > 0 ? n : 0.0;
       }(),
       freeDelivery: d['freeDelivery'] == true,
+      sellerDeliveryPct: d['freeDelivery'] == true
+          ? 0
+          : GstDeliveryOffer.parsePct(d['sellerDeliveryPct']),
       updatedAt: updatedAt,
       clicks: (d['clicks'] as num?)?.toInt() ?? 0,
       impressions: (d['impressions'] as num?)?.toInt() ?? 0,

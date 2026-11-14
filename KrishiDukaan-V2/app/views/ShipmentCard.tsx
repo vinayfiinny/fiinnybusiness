@@ -85,7 +85,7 @@ export default function ShipmentCard({ order, sellerView = false }: { order: Ord
         <>
           {s.cost != null && (s.sellerPaysCourier ?? 0) > 0 ? (
             <p className="text-[11px] font-semibold text-on-surface">
-              Free Delivery order: the courier cost of ₹{s.sellerPaysCourier} is taken from your payout.
+              Your delivery offer: ₹{s.sellerPaysCourier} of the courier cost is taken from your payout.
             </p>
           ) : s.cost != null && (
             <p className="text-[11px] text-on-surface-variant">

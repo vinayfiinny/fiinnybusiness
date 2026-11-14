@@ -124,9 +124,9 @@ t("variantPriceFor: unknown size / no size / bad price -> null (base price used)
   assert.equal(C.variantPriceFor(v, "2L"), null);
 });
 t("commercialOf: defaults and clamping", () => {
-  assert.deepEqual(C.commercialOf(null), { gstApplicable: false, gstRate: 0, gstIncluded: true, extraDeliveryCharge: 0, freeDelivery: false });
+  assert.deepEqual(C.commercialOf(null), { gstApplicable: false, gstRate: 0, gstIncluded: true, extraDeliveryCharge: 0, freeDelivery: false, sellerDeliveryPct: 0 });
   const c = C.commercialOf({ gstApplicable: true, gstRate: 12.5, gstIncluded: false, extraDeliveryCharge: 30, freeDelivery: true });
-  assert.deepEqual(c, { gstApplicable: true, gstRate: 12.5, gstIncluded: false, extraDeliveryCharge: 30, freeDelivery: true });
+  assert.deepEqual(c, { gstApplicable: true, gstRate: 12.5, gstIncluded: false, extraDeliveryCharge: 30, freeDelivery: true, sellerDeliveryPct: 0 });
   assert.equal(C.commercialOf({ gstRate: 500 }).gstRate, 100);
 });
 t("hasCommercial: an old doc with none of the fields does not count", () => {
@@ -434,9 +434,59 @@ console.log(`\n${n} passed`);
   assert.equal(f.delivery.free, true);
   assert.equal(f.delivery.sellerPaysCourier, 269);
 
-  // A parcel with any paid item: the customer pays the courier price for the parcel.
+  // A parcel with a free item and a paid one: the seller pays the free item's
+  // part (by weight), the customer the rest.
   const m = price("+919000000002", [{ ...line, freeDelivery: true }, { ...line, unitPrice: 100 }], slabs, "Telangana", courier);
-  assert.equal(m.deliveryCharge, 269);
+  assert.equal(m.deliveryCharge, 135);                 // 269 × 50%, rounded
+  assert.equal(m.delivery.sellerPaysCourier, 134);
+  assert.equal(m.delivery.free, false);
+
+  // Share offer: the seller pays 50% of this product's delivery.
+  const h = price("+919000000002", [{ ...line, deliveryShare: 0.5 }], slabs, "Telangana", courier);
+  assert.equal(h.deliveryCharge, 135);
+  assert.equal(h.delivery.sellerPaysCourier, 134);
+  assert.equal(h.delivery.slab + h.delivery.extra, 135);  // invoice still sums to what the customer paid
+  assert.equal(h.total, 2300 + 135);
+  // 30% on a light item, nothing on a heavy one → weight decides the parcel's share.
+  const w = price("+919000000002", [{ ...line, weightKg: 1, deliveryShare: 0.3 }, { ...line, weightKg: 9 }], slabs, "Telangana", courier);
+  assert.equal(w.deliveryCharge, Math.round(269 * (1 - 0.03)));
+
+  // Free above ₹X: the store's part of the order reaches it → free; below → normal.
+  const fa = { ...slabs, freeDeliveryAbove: 2000 };
+  const over = price("+919000000002", [line], fa, "Telangana", courier);
+  assert.equal(over.deliveryCharge, 0);
+  assert.equal(over.delivery.free, true);
+  assert.equal(over.delivery.sellerPaysCourier, 269);
+  assert.equal(over.delivery.freeAboveApplied, 2000);
+  const under = price("+919000000002", [{ ...line, unitPrice: 1999 }], fa, "Telangana", courier);
+  assert.equal(under.deliveryCharge, 269);
+  assert.equal(under.delivery.freeAboveApplied, undefined);
+  // Slab mode (courier off) honours it too, keeping what it would have cost.
+  const overSlab = price("+919000000002", [line], fa, "Telangana", null);
+  assert.equal(overSlab.deliveryCharge, 0);
+  assert.equal(overSlab.delivery.waived, 140);
+  // Exactly at the threshold counts; GST added on top doesn't.
+  assert.equal(price("+919000000002", [{ ...line, unitPrice: 2000 }], fa, "Telangana", courier).deliveryCharge, 0);
+
+  // Slab mode share offer: the seller delivers themselves and charges less.
+  const ss = price("+919000000002", [{ ...line, deliveryShare: 0.5 }], slabs, "Telangana", null);
+  assert.equal(ss.deliveryCharge, 70);          // (100 slab + 40 extra) × 50%
+  assert.equal(ss.delivery.sellerCovers, 70);
+  assert.equal(ss.delivery.sellerPaysCourier, undefined);
+  // Mixed shares in slab mode: wholly free lines add no weight, the rest share by weight.
+  const mixed = C.computeSellerDelivery([
+    { ...line, weightKg: 2, extraDeliveryCharge: 0, deliveryShare: 0.5 },
+    { ...line, weightKg: 2, extraDeliveryCharge: 0 },
+    { ...line, weightKg: 50, extraDeliveryCharge: 0, freeDelivery: true },
+  ], slabs, "Telangana");
+  assert.equal(mixed.slab, 75);                // 4kg → ₹100 slab, seller share 25%
+  assert.equal(mixed.sellerCovers, 25);
+
+  // Product-level share is read from the product's commercial settings.
+  assert.equal(C.commercialOf({ sellerDeliveryPct: 50 }).sellerDeliveryPct, 50);
+  assert.equal(C.commercialOf({ sellerDeliveryPct: 150 }).sellerDeliveryPct, 0);   // out of range: ignored
+  assert.equal(C.commercialOf({ freeDelivery: true, sellerDeliveryPct: 50 }).sellerDeliveryPct, 0);
+  assert.equal(C.hasCommercial({ sellerDeliveryPct: 20 }), true);
 
   assert.equal(parcelKgFor([{ qty: 1, weightKg: 5 }]), 5.5);      // +10% packing
   assert.equal(parcelKgFor([{ qty: 1, weightKg: 0.1 }]), 0.5);    // courier minimum

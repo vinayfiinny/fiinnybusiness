@@ -1525,6 +1525,12 @@ export default function ProductDetailView({
                             <ICONS.Delivery className="w-2.5 h-2.5" />{t('freeDeliveryLabel')}
                           </span>
                         )}
+                        {/* This store's share offer on this product: it pays part of the delivery. */}
+                        {!availability?.freeDelivery && (availability?.sellerDeliveryPct ?? 0) > 0 && availability?.isOnline !== false && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-green-100 text-green-700 px-1.5 py-0.5 text-[9px] font-black whitespace-nowrap shrink-0">
+                            <ICONS.Delivery className="w-2.5 h-2.5" />{availability!.sellerDeliveryPct}% off delivery
+                          </span>
+                        )}
                         {(() => {
                           const live = storePhone ? liveStoreRatings[storePhone] : undefined;
                           const avg = live ? live.avg : ((store as any).averageRating ?? 0);

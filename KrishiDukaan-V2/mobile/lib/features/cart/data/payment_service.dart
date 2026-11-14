@@ -228,9 +228,19 @@ class PaymentService {
       // ships by courier with a date (a seller's own delivery has none).
       String? deliveryBy;
       var allDated = sellers.isNotEmpty;
+      // Delivery offers the stores gave (app/lib/free-delivery.ts).
+      var storesCover = 0.0;
+      double? freeAbove;
       for (final b in sellers.whereType<Map>()) {
         final d = b['delivery'];
         final by = d is Map && d['courier'] is Map ? (d['courier'] as Map)['deliveryBy']?.toString() : null;
+        if (d is Map && d['free'] != true) {
+          storesCover += (d['sellerCovers'] as num?)?.toDouble() ?? 0;
+        }
+        final above = d is Map ? (d['freeAboveApplied'] as num?)?.toDouble() : null;
+        if (above != null && above > 0 && (freeAbove == null || above < freeAbove)) {
+          freeAbove = above;
+        }
         if (d is! Map || d['mode'] != 'courier' || by == null || by.isEmpty) {
           allDated = false;
         } else if (deliveryBy == null || by.compareTo(deliveryBy) > 0) {
@@ -248,6 +258,8 @@ class PaymentService {
         gstAdded: (body['gstAdded'] as num?)?.toDouble() ?? 0,
         couriers: couriers,
         deliveryBy: allDated ? deliveryBy : null,
+        storesCover: storesCover,
+        freeAbove: freeAbove,
       );
     } catch (_) {
       return null;
@@ -431,5 +443,16 @@ class CartQuote {
   final List<String> couriers;
   /// Estimated delivery date, YYYY-MM-DD; null unless every parcel has one.
   final String? deliveryBy;
-  const CartQuote({required this.delivery, required this.gstAdded, required this.couriers, this.deliveryBy});
+  /// Rupees of delivery the stores' share offers took off.
+  final double storesCover;
+  /// A store's "free delivery from ₹X" made its part free (the lowest such X).
+  final double? freeAbove;
+  const CartQuote({
+    required this.delivery,
+    required this.gstAdded,
+    required this.couriers,
+    this.deliveryBy,
+    this.storesCover = 0,
+    this.freeAbove,
+  });
 }

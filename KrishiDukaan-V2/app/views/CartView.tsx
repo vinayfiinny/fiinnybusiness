@@ -296,6 +296,10 @@ type ServerQuote = {
   /** Per seller: courier details when priced by a courier, null when the seller's charge. */
   couriers: CourierInfo[];
   sellerCharged: number;
+  /** Rupees of delivery the stores' offers took off this cart. */
+  storesCover: number;
+  /** A store's "free delivery from ₹X" made its part free. */
+  freeAbove: number[];
 };
 
 function useServerDeliveryQuote(readyItems: CartItem[], pincode: string, state: string, enabled: boolean) {
@@ -345,6 +349,9 @@ function useServerDeliveryQuote(readyItems: CartItem[], pincode: string, state: 
           delivery: Number(body.delivery) || 0,
           couriers,
           sellerCharged: sellers.length - couriers.length,
+          storesCover: sellers.reduce((s: number, b: any) =>
+            s + (b?.delivery?.free ? 0 : Number(b?.delivery?.sellerCovers) || 0), 0),
+          freeAbove: sellers.map((b: any) => Number(b?.delivery?.freeAboveApplied) || 0).filter((n: number) => n > 0),
         });
       } catch {
         if (!cancelled) setQuote(null);
@@ -1308,6 +1315,18 @@ export default function CartView({
           {canCheckout && !estimatingDelivery && deliveryByIso && (
             <p className="text-xs font-semibold text-green-700 -mt-1">
               Delivery by {formatDeliveryDate(deliveryByIso)}
+            </p>
+          )}
+
+          {/* Delivery offers the stores gave (lib/free-delivery) */}
+          {canCheckout && !estimatingDelivery && serverQuote && serverQuote.storesCover > 0 && (
+            <p className="text-[11px] font-semibold text-green-700 -mt-1">
+              The store pays ₹{serverQuote.storesCover.toLocaleString("en-IN", { maximumFractionDigits: 2 })} of your delivery
+            </p>
+          )}
+          {canCheckout && !estimatingDelivery && serverQuote && serverQuote.freeAbove.length > 0 && (
+            <p className="text-[11px] font-semibold text-green-700 -mt-1">
+              Free delivery: your order reached the store&apos;s ₹{Math.min(...serverQuote.freeAbove).toLocaleString("en-IN")} offer
             </p>
           )}
 
