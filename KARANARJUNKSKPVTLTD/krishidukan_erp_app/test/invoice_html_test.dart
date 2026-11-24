@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:krishidukan_erp/features/portal/invoice_html.dart';
+import 'package:krishidukan_erp/features/portal/portal_invoice_screen.dart' show screenHtml;
 
 /// The app's invoice must be byte-for-byte the web's "Print Invoice"
 /// (src/utils/b2bInvoiceHtml.ts). The .html files in fixtures/invoice_golden
@@ -21,6 +22,13 @@ void main() {
   }
   test('no branding saved matches the web exactly', () {
     expect(buildB2BInvoiceHtml(bills[0], null), File('$dir/nobrand.html').readAsStringSync());
+  });
+  test('the on-screen copy changes only the viewport line', () {
+    final html = buildB2BInvoiceHtml(bills[0], branding);
+    final shown = screenHtml(html);
+    expect(shown, contains('<meta name="viewport" content="width=1050">'));
+    expect(shown.replaceFirst('<meta name="viewport" content="width=1050">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'), html);
   });
   test('amount in words (Indian system)', () {
     expect(numberToWords(154900), 'One Lakh Fifty Four Thousand Nine Hundred only');
