@@ -9,6 +9,14 @@ name: ERP App APK
 
 on:
   workflow_dispatch:
+    inputs:
+      brand:
+        description: "Which app to build (see KARANARJUNKSKPVTLTD/krishidukan_erp_app/brands/README.md)"
+        type: choice
+        default: karanarjun
+        options:
+          - karanarjun
+          - agrimass
   push:
     branches: [ main ]
     paths:
@@ -22,6 +30,9 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      # A push to main always builds the KaranArjun app.
+      BRAND: ${{ inputs.brand || 'karanarjun' }}
     defaults:
       run:
         working-directory: KARANARJUNKSKPVTLTD/krishidukan_erp_app
@@ -79,16 +90,32 @@ jobs:
 
       - run: flutter pub get
 
+      # White-label builds: same code, the client's name and icon. The default
+      # (karanarjun) skips this step, so that build is unchanged.
+      - name: Apply brand
+        if: env.BRAND != 'karanarjun'
+        run: |
+          NAME=$(python3 -c "import json;print(json.load(open('brands/$BRAND/brand.json'))['BRAND_NAME'])")
+          echo "Branding the app as: $NAME"
+          sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">$NAME</string>|" android/app/src/main/res/values/strings.xml
+          grep app_name android/app/src/main/res/values/strings.xml
+          dart run flutter_launcher_icons -f "flutter_launcher_icons-$BRAND.yaml"
+
       - name: Analyze and test
         run: |
           flutter analyze
           flutter test
 
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          if [ "$BRAND" = "karanarjun" ]; then
+            flutter build apk --release
+          else
+            flutter build apk --release --dart-define-from-file="brands/$BRAND/brand.json"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: krishidukan-erp-apk
+          name: ${{ env.BRAND == 'karanarjun' && 'krishidukan-erp-apk' || format('{0}-erp-apk', env.BRAND) }}
           path: KARANARJUNKSKPVTLTD/krishidukan_erp_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30

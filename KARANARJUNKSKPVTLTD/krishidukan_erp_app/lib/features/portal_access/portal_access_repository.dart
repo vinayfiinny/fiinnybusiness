@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/brand.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -208,7 +209,7 @@ class PortalAccessRepository {
         final here = await _existsInTenant(email).catchError((_) => false);
         return here
             ? '$email already has a login in your business.'
-            : '$email already has a KaranArjun login that is not part of your business '
+            : '$email already has a ${Brand.shortName} login that is not part of your business '
                 '(it may be another business\'s user, or a half-finished earlier invite). '
                 'Use a different email, or contact support to clear it.';
       case 'invalid-email':

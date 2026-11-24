@@ -1,0 +1,9 @@
+# Launcher icon for the Agrimass build only (the workflow runs it before
+# building). The default icon stays configured in pubspec.yaml.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/brands/agrimass/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/brands/agrimass/app_icon.png"

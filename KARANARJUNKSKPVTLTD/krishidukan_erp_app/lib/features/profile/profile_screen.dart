@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/brand.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
@@ -124,7 +125,7 @@ class ProfileScreen extends ConsumerWidget {
               const SizedBox(height: 20),
               Center(
                 child: Text(
-                  'KrishiDukan ERP · Figures are read-only here.\nCreate and edit in the web ERP.',
+                  '${Brand.name} · Figures are read-only here.\nCreate and edit in the web ERP.',
                   textAlign: TextAlign.center,
                   style: AppText.small,
                 ),

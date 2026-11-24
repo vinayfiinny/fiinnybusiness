@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/brand.dart';
 import '../app/theme.dart';
 
 /// White rounded card with a hairline border and a very soft shadow.
@@ -621,7 +622,7 @@ class BrandLogo extends StatelessWidget {
         boxShadow: kCardShadow,
       ),
       child: Image.asset(
-        'assets/icons/app_icon.png',
+        Brand.logoAsset,
         cacheWidth: px,
         filterQuality: FilterQuality.medium,
       ),

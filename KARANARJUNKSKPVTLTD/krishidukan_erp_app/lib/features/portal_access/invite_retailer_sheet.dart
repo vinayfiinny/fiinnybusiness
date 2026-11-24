@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../core/brand.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -217,7 +218,7 @@ class _InviteSheetState extends ConsumerState<_InviteSheet> {
     final message = 'Namaste ${d.retailer.name},\n'
         '${business.isEmpty ? 'We have' : '$business has'} given you access to your account — '
         'see your bills, payments and balance any time.\n\n'
-        'Open the KaranArjun ERP app or $erpBaseUrl and sign in with:\n'
+        'Open the ${Brand.shortName} ERP app or $erpBaseUrl and sign in with:\n'
         'Email: ${d.email}\n'
         'Password: ${d.password}\n\n'
         'Please change the password after your first login.';

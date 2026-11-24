@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/brand.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/access.dart';
@@ -24,7 +25,7 @@ class KrishiDukanErpApp extends ConsumerWidget {
     AppColors.variant = variant;
 
     return MaterialApp(
-      title: 'KrishiDukan ERP',
+      title: Brand.name,
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       // Screens read AppColors.* directly, and const subtrees don't rebuild
