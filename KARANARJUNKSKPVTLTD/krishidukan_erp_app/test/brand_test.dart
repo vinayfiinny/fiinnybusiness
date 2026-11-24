@@ -22,9 +22,16 @@ void main() {
     expect(File('assets/brands/agrimass/app_icon.png').existsSync(), isTrue);
     expect(File('assets/brands/agrimass/logo.png').existsSync(), isTrue);
     expect(File('assets/brands/agrimass/tile.png').existsSync(), isTrue);
-    expect(File('flutter_launcher_icons-agrimass.yaml').readAsStringSync(),
+    expect(File('brands/agrimass/launcher_icons.yaml').readAsStringSync(),
         contains('assets/brands/agrimass/app_icon.png'));
     expect(File('pubspec.yaml').readAsStringSync(), contains('assets/brands/agrimass/'));
+    // The Android app name must come from strings.xml (the brand step edits
+    // it) — a hard-coded label left the Agrimass APK named "KrishiDukan ERP".
+    expect(File('android/app/src/main/AndroidManifest.xml').readAsStringSync(),
+        contains('android:label="@string/app_name"'));
+    // A flutter_launcher_icons-<x>.yaml file is read as a build flavor and the
+    // icon never reaches the APK.
+    expect(File('flutter_launcher_icons-agrimass.yaml').existsSync(), isFalse);
     // The default app title / logo are not hardcoded anywhere else.
     expect(File('assets/icons/app_icon.png').existsSync(), isTrue);
   });

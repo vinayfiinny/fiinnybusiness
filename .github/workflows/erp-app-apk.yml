@@ -99,7 +99,7 @@ jobs:
           echo "Branding the app as: $NAME"
           sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">$NAME</string>|" android/app/src/main/res/values/strings.xml
           grep app_name android/app/src/main/res/values/strings.xml
-          dart run flutter_launcher_icons -f "flutter_launcher_icons-$BRAND.yaml"
+          dart run flutter_launcher_icons -f "brands/$BRAND/launcher_icons.yaml"
 
       - name: Analyze and test
         run: |

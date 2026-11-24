@@ -1,0 +1,10 @@
+# Launcher icon for the Agrimass build only (the workflow runs it before building).
+# NOT named flutter_launcher_icons-<x>.yaml: that name makes the tool treat it as a
+# build flavor and write the icons where the build never looks.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/brands/agrimass/app_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/brands/agrimass/app_icon.png"

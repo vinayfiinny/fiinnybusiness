@@ -19,7 +19,9 @@ the build machine):
 1. `assets/brands/<id>/app_icon.png` - square, 1024 px, white background, logo
    inside the middle ~65% (Android crops the edges of adaptive icons).
 2. `brands/<id>/brand.json` - `BRAND_NAME`, `BRAND_SHORT`, `BRAND_LOGO`.
-3. `flutter_launcher_icons-<id>.yaml` - copy the agrimass one, change the path.
+3. `brands/<id>/launcher_icons.yaml` - copy the agrimass one, change the path.
+   Do NOT name it `flutter_launcher_icons-<id>.yaml`: the tool then treats it as a
+   build flavor and the icon never reaches the APK.
 4. Add `<id>` to the workflow's `brand` choices, and
    `assets/brands/<id>/` to the assets in pubspec.yaml.
 
