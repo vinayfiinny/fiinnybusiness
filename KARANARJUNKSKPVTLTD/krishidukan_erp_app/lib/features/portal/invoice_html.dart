@@ -1,19 +1,35 @@
 // ignore_for_file: unnecessary_string_escapes, unnecessary_brace_in_string_interps, curly_braces_in_flow_control_structures
-// The HTML below is generated from src/utils/b2bInvoiceHtml.ts — keep as is.
 import 'package:intl/intl.dart';
 
-/// The B2B invoice EXACTLY as the web prints it for a retailer ("Print
-/// Invoice" on their profile: src/utils/printB2BInvoice.ts →
-/// buildB2BInvoiceHtml in src/utils/b2bInvoiceHtml.ts). The HTML below is
-/// generated from that file mechanically, not retyped, and is rendered by the
-/// same kind of browser engine, so the retailer sees the same bill in the app
-/// as on the web. Keep the two in step: change b2bInvoiceHtml.ts, regenerate.
-///
-/// JavaScript semantics are kept on purpose (falsy checks, `??`, Number(),
-/// String(), toLocaleString('en-IN')) so edge values print identically.
+import '../../core/parse.dart' show gstinError;
 
 /// INVOICE_CONTACT_LABEL in src/utils/constants.ts.
 const invoiceContactLabel = '9307199040, 7232839475';
+
+/// B2B GST bills use the web invoice editor's A4 layout. Older order types
+/// keep the retailer worklist's standalone print layout.
+String buildPortalInvoiceHtml(
+        Map<String, dynamic> order, Map<String, dynamic>? branding) =>
+    buildB2BInvoiceHtml(order, branding, a4: order['invoiceType'] == 'B2B_GST');
+
+const _a4Styles = '''
+  .a4 h1 { letter-spacing: -0.01em; }
+  .a4 .buyer-field { display: flex; gap: 8px; margin-top: 3px; }
+  .a4 .buyer-address { white-space: pre-wrap; margin: 3px 0; font-size: 0.82rem; }
+  .a4 .gst-state { color: #10b981; font-size: 0.72rem; margin-top: 2px; }
+  .a4 .licenses { display: flex; gap: 10px; flex-wrap: wrap; color: #555; font-size: 0.7rem; margin-top: 2px; }
+  .a4 .items .value { text-align: center; }
+  .a4 .items .qty, .a4 .items .gross, .a4 .items .item-name { font-weight: 600; }
+  @media screen {
+    body { background: #f5f5f5; padding: 16px; }
+    .card.a4 { min-height: 1485px; background: #fff; border: 1px solid #ddd; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); padding: 18px 22px; }
+  }
+  @media print {
+    .card.a4 { padding: 8mm; }
+    .a4 .items th, .a4 .items td { padding: 3px 4px; font-size: 0.76rem; }
+    .a4 .gst-state { display: none; }
+  }
+''';
 
 // ── JavaScript-equivalent helpers ───────────────────────────────────────────
 
@@ -120,10 +136,12 @@ String numberToWords(double num) {
   return '$result only';
 }
 
-/// buildB2BInvoiceHtml(o, branding): the saved salesOrders doc and the
-/// tenant's settings/invoice doc (fetchInvoiceBranding), as raw maps.
+/// The saved salesOrders doc and settings/invoice doc, as raw maps.
+/// The legacy layout mirrors src/utils/b2bInvoiceHtml.ts. The A4 layout
+/// follows the read-only document content of src/pages/B2BInvoicePage.tsx.
 String buildB2BInvoiceHtml(
-    Map<String, dynamic> o, Map<String, dynamic>? branding) {
+    Map<String, dynamic> o, Map<String, dynamic>? branding,
+    {bool a4 = false}) {
   final b = branding ?? const <String, dynamic>{};
   final sellerName = _truthy(b['businessName'])
       ? _jsStr(b['businessName'])
@@ -154,10 +172,16 @@ String buildB2BInvoiceHtml(
   final firstGst = items.where((r) => _number(r['gstPct']) > 0).firstOrNull;
   final firstGstPct = _number(firstGst?['gstPct'] ?? 0);
   final halfPct = firstGstPct / 2;
+  String amount(double value) => a4 ? _fixedAmount(value) : _fmt(value);
 
   final lineRows = [
-    for (var idx = 0; idx < items.length; idx++) _row(items[idx], idx)
+    for (var idx = 0; idx < items.length; idx++)
+      a4 ? _a4Row(items[idx], idx) : _row(items[idx], idx)
   ].join('');
+  final billLabel =
+      a4 && o['modeOfPayment'] == 'Cash' ? 'CASH BILL' : 'CREDIT BILL';
+  final gstLabel = a4 ? 'GSTIN NO' : 'GSTTIN NO';
+  final billedDate = a4 ? _a4Date(o['invoiceDate']) : o['invoiceDate'];
 
   return '''<!DOCTYPE html>
 <html>
@@ -173,11 +197,11 @@ String buildB2BInvoiceHtml(
   th { background: #f2f2f2; font-weight: 700; text-align: center; border: 1px solid #222; padding: 4px 5px; font-size: 0.82rem; }
   td { border: 1px solid #222; padding: 4px 5px; font-size: 0.82rem; }
   .label { font-weight: 700; font-size: 0.82rem; }
-  @media print { body { margin: 0; } }
+  @media print { body { margin: 0; } }${a4 ? '\n$_a4Styles' : ''}
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card${a4 ? ' a4' : ''}">
 
   <!-- TITLE -->
   <div style="text-align:center;font-weight:700;font-size:1rem;letter-spacing:0.15em;margin-bottom:2px">GST INVOICE</div>
@@ -192,33 +216,33 @@ String buildB2BInvoiceHtml(
           <strong>Contact:</strong> ${invoiceContactLabel}
           ${_truthy(b['contact']) ? '&nbsp; Contact No.: ${_esc(b['contact'])}' : ''}
           ${_truthy(b['email']) ? '&nbsp; Email: ${_esc(b['email'])}' : ''}
-        </div>
+        </div>${a4 ? _a4Licenses(b) : ''}
       </div>
     </div>
-    <div style="text-align:right;font-weight:700;font-size:1rem;color:#111;border:2px solid #111;padding:4px 12px;border-radius:6px">CREDIT BILL</div>
+    <div style="text-align:right;font-weight:700;font-size:1rem;color:#111;border:2px solid #111;padding:4px 12px;border-radius:6px">$billLabel</div>
   </div>
 
-  ${_truthy(b['gstin']) ? '<div style="text-align:center;font-weight:700;font-size:0.9rem;margin-bottom:10px;letter-spacing:0.05em">GSTTIN NO: ${_esc(b['gstin'])}</div>' : ''}
+  ${_truthy(b['gstin']) ? '<div style="text-align:center;font-weight:700;font-size:0.9rem;margin-bottom:10px;letter-spacing:0.05em">$gstLabel: ${_esc(b['gstin'])}</div>' : ''}
 
   <!-- BUYER + META -->
   <div style="display:grid;grid-template-columns:1fr 1fr;margin-bottom:10px;border:1px solid #222">
     <div style="border-right:1px solid #222;padding:8px">
       <div class="label" style="margin-bottom:4px">Details for Buyer (Billed &amp; Shipped To)</div>
-      <div style="font-weight:700;font-size:0.88rem">${_esc(o['retailerName'])}</div>
+      <div style="font-weight:700;font-size:0.88rem">${_esc(o['retailerName'])}</div>${a4 ? _a4Buyer(o) : '\n' '''
       <div style="font-size:0.82rem;margin-top:2px">${_esc(o['buyerAddress'])}</div>
       ${_truthy(o['buyerGstin']) ? '<div style="font-size:0.82rem;margin-top:2px"><span class="label">GSTIN:</span> ${_esc(o['buyerGstin'])}</div>' : ''}
-      ${_truthy(o['buyerContact']) ? '<div style="font-size:0.82rem;margin-top:2px"><span class="label">Contact No.:</span> ${_esc(o['buyerContact'])}</div>' : ''}
+      ${_truthy(o['buyerContact']) ? '<div style="font-size:0.82rem;margin-top:2px"><span class="label">Contact No.:</span> ${_esc(o['buyerContact'])}</div>' : ''}'''}
     </div>
     <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
       <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
         <span class="label">Invoice No :</span><span style="font-weight:700">${_esc(o['orderNumber'])}</span>
       </div>
       <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
-        <span class="label">Invoice Date :</span><span>${_esc(o['invoiceDate'])}</span>
+        <span class="label">Invoice Date :</span><span>${_esc(billedDate)}</span>
       </div>
       <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
         <span class="label">Terms of Delivery :</span><span>${_esc(o['termsOfDelivery'])}</span>
-      </div>
+      </div>${a4 ? _a4Transporter(o) : ''}
       <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
         <span class="label">Mode of Payment :</span><span>${_esc(o['modeOfPayment'])}</span>
       </div>
@@ -230,10 +254,10 @@ String buildB2BInvoiceHtml(
 
   <!-- ITEMS TABLE -->
   <div style="margin-bottom:10px;overflow-x:auto">
-    <table>
+    <table${a4 ? ' class="items"' : ''}>
       <thead>
         <tr>
-          <th style="width:30px">S.No</th>
+          <th style="width:30px">S.No</th>${a4 ? _a4ItemHeaders : '\n' '''
           <th style="min-width:140px">Item Descriptions</th>
           <th style="width:78px">BATCH NO.</th>
           <th style="width:78px">Exp. Date</th>
@@ -244,14 +268,14 @@ String buildB2BInvoiceHtml(
           <th style="width:52px">Box Qty</th>
           <th style="width:54px">Qty</th>
           <th style="width:62px">RATE</th>
-          <th style="width:82px">Gross Amount</th>
+          <th style="width:82px">Gross Amount</th>'''}
         </tr>
       </thead>
       <tbody>
         ${lineRows}
         <tr style="font-weight:700;background:#f9f9f9">
-          <td colspan="11" style="text-align:right;padding-right:8px;border:1px solid #222;font-size:0.78rem">TOTAL</td>
-          <td style="text-align:center;border:1px solid #222;font-size:0.78rem">${_fmt(totalGross)}</td>
+          <td colspan="${a4 ? 9 : 11}" style="text-align:right;padding-right:8px;border:1px solid #222;font-size:0.78rem">TOTAL</td>
+          <td style="text-align:center;border:1px solid #222;font-size:0.78rem">${amount(totalGross)}</td>
         </tr>
       </tbody>
     </table>
@@ -273,26 +297,26 @@ String buildB2BInvoiceHtml(
         </thead>
         <tbody>
           <tr>
-            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_fmt(taxableValue)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${amount(taxableValue)}</td>
             <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_jsNum(halfPct)}%</td>
-            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_fmt(cgst)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${amount(cgst)}</td>
             <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_jsNum(halfPct)}%</td>
-            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_fmt(sgst)}</td>
-            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${_fmt(totalTax)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${amount(sgst)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;text-align:center">${amount(totalTax)}</td>
           </tr>
           <tr>
-            <td style="border:1px solid #ccc;padding:3px 5px;font-weight:700">Total: ${_fmt(taxableValue)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;font-weight:700">Total: ${amount(taxableValue)}</td>
             <td colspan="4" style="border:1px solid #ccc;padding:3px 5px"></td>
-            <td style="border:1px solid #ccc;padding:3px 5px;font-weight:700;text-align:center">${_fmt(totalTax)}</td>
+            <td style="border:1px solid #ccc;padding:3px 5px;font-weight:700;text-align:center">${amount(totalTax)}</td>
           </tr>
         </tbody>
       </table>
     </div>
     <div style="padding:8px;display:flex;flex-direction:column;gap:3px;font-size:0.82rem">
-      <div style="display:flex;justify-content:space-between"><span>Output CGST@${_jsNum(halfPct)}%</span><span>${_fmt(cgst)}</span></div>
-      <div style="display:flex;justify-content:space-between"><span>Output SGST@${_jsNum(halfPct)}%</span><span>${_fmt(sgst)}</span></div>
-      <div style="display:flex;justify-content:space-between"><span>Round Off</span><span>${_fmt(roundOff)}</span></div>
-      <div style="display:flex;justify-content:space-between"><span>Discount (-)</span><span>${_fmt(discountAmount)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Output CGST@${_jsNum(halfPct)}%</span><span>${amount(cgst)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Output SGST@${_jsNum(halfPct)}%</span><span>${amount(sgst)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Round Off</span><span>${amount(roundOff)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Discount (-)</span><span>${amount(discountAmount)}</span></div>
       <div style="border-top:2px solid #111;margin-top:4px;padding-top:4px;display:flex;justify-content:space-between;font-weight:900;font-size:1rem">
         <span>NET AMOUNT</span><span>₹${_locale(netAmount)}</span>
       </div>
@@ -327,14 +351,14 @@ String buildB2BInvoiceHtml(
 
   <!-- REMARK -->
   <div style="border:1px solid #222;margin-bottom:0;padding:5px 8px;font-size:0.82rem;display:flex;align-items:center;gap:8px">
-    <strong>REMARK :</strong>
+    <strong>REMARK :</strong>${a4 ? _esc(o['remarks']) : ''}
   </div>
 
   <!-- DECLARATION + SIGNATURE -->
   <div style="border:1px solid #222;border-top:none;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr">
     <div style="border-right:1px solid #222;padding:8px;font-size:0.75rem">
       <div class="label" style="margin-bottom:3px">Declaration :</div>
-      <div style="color:#444;line-height:1.5">We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
+      <div style="color:#444;line-height:1.5">We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>${a4 ? _customerSignature : ''}
     </div>
     <div style="padding:8px;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;font-size:0.8rem">
       <div style="font-weight:700">For ${_esc(sellerName)}</div>
@@ -353,9 +377,148 @@ String buildB2BInvoiceHtml(
 </html>''';
 }
 
+String _fixedAmount(double amount) =>
+    amount.isFinite ? amount.toStringAsFixed(2) : '—';
+
+final _isoDate = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
+final _isoMonth = RegExp(r'^(\d{4})-(\d{2})');
+
+String _a4Date(Object? value) {
+  final date = _jsStr(value);
+  final match = _isoDate.firstMatch(date.trim());
+  if (match == null) return date;
+  return '${int.parse(match[2]!)}/${int.parse(match[3]!)}/${match[1]}';
+}
+
+String _a4Expiry(Object? value) {
+  final expiry = _jsStr(value);
+  final match = _isoMonth.firstMatch(expiry.trim());
+  return match == null ? expiry : '${match[2]}/${match[1]!.substring(2)}';
+}
+
+// State names used by the A4 web form's GSTIN validator.
+const _gstStates = {
+  '01': 'Jammu & Kashmir',
+  '02': 'Himachal Pradesh',
+  '03': 'Punjab',
+  '04': 'Chandigarh',
+  '05': 'Uttarakhand',
+  '06': 'Haryana',
+  '07': 'Delhi',
+  '08': 'Rajasthan',
+  '09': 'Uttar Pradesh',
+  '10': 'Bihar',
+  '11': 'Sikkim',
+  '12': 'Arunachal Pradesh',
+  '13': 'Nagaland',
+  '14': 'Manipur',
+  '15': 'Mizoram',
+  '16': 'Tripura',
+  '17': 'Meghalaya',
+  '18': 'Assam',
+  '19': 'West Bengal',
+  '20': 'Jharkhand',
+  '21': 'Odisha',
+  '22': 'Chhattisgarh',
+  '23': 'Madhya Pradesh',
+  '24': 'Gujarat',
+  '26': 'Dadra & Nagar Haveli / Daman & Diu',
+  '27': 'Maharashtra',
+  '28': 'Andhra Pradesh',
+  '29': 'Karnataka',
+  '30': 'Goa',
+  '31': 'Lakshadweep',
+  '32': 'Kerala',
+  '33': 'Tamil Nadu',
+  '34': 'Puducherry',
+  '35': 'Andaman & Nicobar',
+  '36': 'Telangana',
+  '37': 'Andhra Pradesh (New)',
+  '38': 'Ladakh',
+};
+
+String _a4Buyer(Map<String, dynamic> order) {
+  final gstin = _jsStr(order['buyerGstin']).trim().toUpperCase();
+  final gstState = gstin.isNotEmpty && gstinError(gstin) == null
+      ? _gstStates[gstin.substring(0, 2)]
+      : null;
+  final savedState = _jsStr(order['buyerState']).trim();
+  final buyerState = savedState.isEmpty ? gstState : savedState;
+  return '''
+      <div class="buyer-address">${_esc(order['buyerAddress'])}</div>
+      <div class="buyer-field"><span class="label">GST No.:</span>
+        <div>${_esc(gstin)}
+          ${gstState == null ? '' : '<div class="gst-state">✓ ${_esc(gstState)}</div>'}
+        </div>
+      </div>
+      <div class="buyer-field"><span class="label">Contact No.:</span><span>${_esc(order['buyerContact'])}</span></div>
+      <div class="buyer-field"><span class="label">State :</span><span>${_esc(buyerState)}</span></div>''';
+}
+
+String _a4Transporter(Map<String, dynamic> order) {
+  final name = _jsStr(order['transporterName']).trim();
+  final phone = _jsStr(order['transporterContact']).trim();
+  return '''
+      <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
+        <span class="label">Transporter :</span><span>${name.isEmpty ? '—' : _esc(name)}</span>
+      </div>
+      ${phone.isEmpty ? '' : '''
+      <div style="display:grid;grid-template-columns:130px 1fr;gap:4px;align-items:center">
+        <span class="label">Transporter Ph :</span><span>${_esc(phone)}</span>
+      </div>'''}''';
+}
+
+String _a4Licenses(Map<String, dynamic> branding) {
+  const labels = {
+    'fertilizerLicense': 'Fert. Lic',
+    'pesticideLicense': 'Pest. Lic',
+    'seedsLicense': 'Seeds Lic',
+  };
+  final licenses = [
+    for (final label in labels.entries)
+      if (_truthy(branding[label.key]))
+        '<span><strong>${label.value}:</strong> ${_esc(branding[label.key])}</span>',
+  ];
+  return licenses.isEmpty
+      ? ''
+      : '<div class="licenses">${licenses.join()}</div>';
+}
+
+const _a4ItemHeaders = '''
+          <th style="min-width:150px">Item Descriptions</th>
+          <th style="width:90px">Company</th>
+          <th style="width:80px">Batch No.</th>
+          <th style="width:72px">Exp. Date</th>
+          <th style="width:48px">Per</th>
+          <th style="width:48px">GST %</th>
+          <th style="width:56px">Qty</th>
+          <th style="width:70px">Rate</th>
+          <th style="width:88px">Gross Amount</th>''';
+
+String _a4Row(Map<String, dynamic> row, int index) {
+  final gross = _number(row['grossAmount']);
+  return '''
+        <tr>
+          <td class="value">${index + 1}</td>
+          <td class="item-name">${_esc(row['itemDescription'])}</td>
+          <td class="value">${_esc(row['mfgCompany'])}</td>
+          <td class="value">${_esc(row['batchNo'])}</td>
+          <td class="value">${_esc(_a4Expiry(row['expDate']))}</td>
+          <td class="value">${_esc(row['per'] ?? 'Nos')}</td>
+          <td class="value">${_esc(row['gstPct'])}</td>
+          <td class="value qty">${_esc(row['quantity'])}</td>
+          <td class="value">${_esc(row['rate'])}</td>
+          <td class="value gross">${_truthy(gross) ? _fixedAmount(gross) : ''}</td>
+        </tr>''';
+}
+
+const _customerSignature = '''
+      <div style="margin-top:18px;border-top:1px solid #555;padding-top:3px;width:150px;text-align:center;font-size:0.72rem">Customer Signature</div>''';
+
 // The leading '\n' is the newline Dart drops after an opening ''' — the web
 // template starts each row with it.
-String _row(Map<String, dynamic> r, int idx) => '\n' '''
+String _row(Map<String, dynamic> r, int idx) => '\n'
+    '''
         <tr>
             <td style="text-align:center;border:1px solid #222;padding:2px 3px;font-size:0.78rem">${idx + 1}</td>
             <td style="border:1px solid #222;padding:2px 3px;font-size:0.78rem">${_esc(r['itemDescription'])}</td>

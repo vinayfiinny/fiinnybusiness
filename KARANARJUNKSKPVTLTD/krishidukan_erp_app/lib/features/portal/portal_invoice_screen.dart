@@ -64,10 +64,8 @@ Future<Uint8List> renderPortalInvoicePdf(
   return bytes;
 }
 
-/// A retailer's own bill, shown exactly as the web prints it for them
-/// ("Print Invoice" on their profile): the same HTML (invoice_html.dart, a
-/// generated port of b2bInvoiceHtml.ts) in the phone's browser engine.
-/// View, share and print only — a retailer can't change a bill.
+/// A retailer's saved bill, rendered in the phone's browser engine.
+/// View, share and print use the same invoice layout.
 ///
 /// Shown in a web view, not as a PDF preview: the PDF preview (page images)
 /// stayed blank on testers' phones while printing the same PDF worked
@@ -121,7 +119,8 @@ class _PortalInvoiceScreenState extends ConsumerState<PortalInvoiceScreen> {
         ref.watch(appUserProvider).valueOrNull?.businessName ?? 'your supplier';
     final ready = async.valueOrNull;
     final order = ready?.$1;
-    final html = order == null ? null : buildB2BInvoiceHtml(order, ready?.$2);
+    final html =
+        order == null ? null : buildPortalInvoiceHtml(order, ready?.$2);
     final invoiceNumber = str(order?['orderNumber']);
     final fileNumber = (invoiceNumber.isEmpty ? widget.number : invoiceNumber)
         .replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
