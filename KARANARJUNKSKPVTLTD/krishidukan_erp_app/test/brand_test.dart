@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:krishidukan_erp/core/brand.dart';
 /// `--dart-define-from-file` with `brands/<id>/brand.json`) swaps only name and logo.
 void main() {
   const branded = bool.hasEnvironment('BRAND_NAME');
+  const agrimassIcon = 'assets/brands/agrimass/app_icon.png';
 
   test('with no brand defined, the app is exactly the KaranArjun app', () {
     if (branded) return; // covered by the branded run below
@@ -17,14 +19,18 @@ void main() {
 
   test('the Agrimass brand files are complete and consistent', () {
     // Plain file checks, so they run in every build, branded or not.
-    final json = File('brands/agrimass/brand.json').readAsStringSync();
-    expect(json, contains('"BRAND_NAME": "Agrimass"'));
-    expect(File('assets/brands/agrimass/app_icon.png').existsSync(), isTrue);
-    expect(File('assets/brands/agrimass/logo.png').existsSync(), isTrue);
-    expect(File('assets/brands/agrimass/tile.png').existsSync(), isTrue);
-    expect(File('brands/agrimass/launcher_icons.yaml').readAsStringSync(),
-        contains('assets/brands/agrimass/app_icon.png'));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('assets/brands/agrimass/'));
+    final brand =
+        jsonDecode(File('brands/agrimass/brand.json').readAsStringSync())
+            as Map<String, dynamic>;
+    expect(brand['BRAND_NAME'], 'Agrimass');
+    expect(brand['BRAND_LOGO'], agrimassIcon);
+    expect(File(agrimassIcon).existsSync(), isTrue);
+    final launcher =
+        File('brands/agrimass/launcher_icons.yaml').readAsStringSync();
+    expect(launcher, contains('image_path: "$agrimassIcon"'));
+    expect(launcher, contains('adaptive_icon_foreground: "$agrimassIcon"'));
+    expect(File('pubspec.yaml').readAsStringSync(),
+        contains('assets/brands/agrimass/'));
     // The Android app name must come from strings.xml (the brand step edits
     // it) — a hard-coded label left the Agrimass APK named "KrishiDukan ERP".
     expect(File('android/app/src/main/AndroidManifest.xml').readAsStringSync(),
@@ -40,6 +46,6 @@ void main() {
     if (!branded) return;
     expect(Brand.name, 'Agrimass');
     expect(Brand.shortName, 'Agrimass');
-    expect(Brand.logoAsset, 'assets/brands/agrimass/tile.png');
+    expect(Brand.logoAsset, agrimassIcon);
   });
 }
