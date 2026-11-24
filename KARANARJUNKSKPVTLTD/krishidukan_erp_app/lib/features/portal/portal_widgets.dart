@@ -7,7 +7,7 @@ import '../../core/format.dart';
 import '../../widgets/form_bits.dart' show fmtInr2;
 import '../../widgets/ui.dart';
 import '../auth/auth_repository.dart';
-import '../billing/bill_detail_screen.dart';
+import 'portal_invoice_screen.dart';
 import 'portal_models.dart';
 import 'portal_repository.dart';
 import 'statement_pdf.dart';
@@ -120,8 +120,9 @@ class PortalBillTile extends StatelessWidget {
     final b = bill;
     return AppCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      // The invoice exactly as the web prints it for the retailer.
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => BillDetailScreen(orderId: b.id, portal: true))),
+          builder: (_) => PortalInvoiceScreen(orderId: b.id, number: b.number))),
       child: Row(
         children: [
           IconBadge(

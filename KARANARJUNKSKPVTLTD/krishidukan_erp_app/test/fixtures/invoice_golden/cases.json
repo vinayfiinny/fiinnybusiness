@@ -1,0 +1,13 @@
+{
+  "branding": {"businessName": "Test Agro & Co <Pune>", "address": "Shop 1, Market Yard", "gstin": "27ABCDE1234F1Z5", "contact": "9000000001", "email": "shop@example.com", "bankDetails": "Bank: Test Bank\nA/C: 0000\nIFSC: TEST0000", "logoUrl": "https://example.com/logo.png", "signatureName": "Owner"},
+  "bills": [
+    {"orderNumber": "SIPL/26-27/001", "invoiceType": "B2B_GST", "invoiceDate": "2026-07-04", "retailerName": "Sample Krushi Kendra", "buyerAddress": "At Post Sample", "buyerGstin": "27XYZAB9876C1Z2", "buyerContact": "9000000002", "termsOfDelivery": "Immediate", "modeOfPayment": "Credit", "salesmanName": "Ravi",
+     "lineItems": [{"itemDescription": "Urea 45kg", "batchNo": "B1", "expDate": "2027-01", "gstPct": 5, "midOff": 0, "per": "Bag", "boxes": 2, "boxQty": 10, "quantity": 20, "rate": 266.5, "grossAmount": 5330},
+                   {"itemDescription": "DAP", "batchNo": "", "gstPct": "5", "quantity": 3, "rate": "1350", "grossAmount": 4050.75}],
+     "taxableValue": 13333.333333333332, "cgst": 333.33333333333326, "sgst": 333.33333333333326, "totalTax": 666.6666666666665, "roundOff": 0.33, "discountAmount": 0,
+     "netAmount": 154900.5, "previousBalance": 12000, "grandTotal": 154900.5},
+    {"orderNumber": "KA-0427", "invoiceDate": "2026-09-15", "retailerName": "Cash Customer", "lineItems": [{"itemDescription": "Seeds", "quantity": 1, "rate": 1600, "grossAmount": 1600}], "grandTotal": "1600", "netBalance": 1600},
+    {"orderNumber": "EMPTY-1", "lineItems": [], "netAmount": 0},
+    {"orderNumber": "X-2", "lineItems": [{"itemDescription": "Weird", "gstPct": 18, "grossAmount": 0}], "netAmount": 10000000.25, "previousBalance": -500}
+  ]
+}

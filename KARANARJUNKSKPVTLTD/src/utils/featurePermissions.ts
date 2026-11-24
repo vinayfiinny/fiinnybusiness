@@ -379,3 +379,46 @@ function buildDefaults(): FeaturePermissions {
 }
 
 export const DEFAULT_FEATURE_PERMISSIONS: FeaturePermissions = buildDefaults();
+
+/**
+ * The retailer portal is system-defined, not just admin-defined: whatever a
+ * saved permission matrix says, a retailer login
+ *   - always has the Worklist screen (without it the portal does not exist:
+ *     the login succeeds and then every page refuses it), and
+ *   - can never be granted a write action (create / edit / delete / payment /
+ *     reminder). The page also blocks them (isViewOnly) and so do the rules;
+ *     this keeps the matrix from showing, or the UI from offering, what the
+ *     portal can never do.
+ * The view tabs in RETAILER_ALLOWED stay admin-controllable ("Data Security").
+ *
+ * Why: a master-tenant matrix saved before the retailer role existed stored
+ * `retailer.worklist = false`, which overrides the default key by key, so
+ * every retailer invited afterwards was locked out until an admin hand-edited
+ * the matrix (Nov 2026). Mirrored in the app (lib/core/tenant_permissions.dart).
+ */
+export function enforceRetailerPortalRole<T extends Record<string, boolean>>(perms: T | undefined): T {
+    return { ...(perms ?? ({} as T)), worklist: true };
+}
+
+/**
+ * A retailer always sees their own bills (with the invoice) and payments —
+ * that IS the portal, so no setting can hide them. Product Sales stays
+ * admin-controllable.
+ */
+export const RETAILER_ALWAYS_VISIBLE = new Set([
+    'worklist.invoices.view',
+    'worklist.payments.view',
+    'worklist.retailerProfile.view',
+    'worklist.retailerProfile.b2bOrders.view',
+    'worklist.retailerProfile.payments.view',
+]);
+
+export function enforceRetailerPortalFeatures(features: FeaturePermissionMap | undefined): FeaturePermissionMap {
+    const out: FeaturePermissionMap = { ...(features ?? {}) };
+    for (const id of Object.keys(out)) {
+        if (id.startsWith('worklist.') && !RETAILER_ALLOWED.has(id)) out[id] = false;
+    }
+    for (const id of RETAILER_ALWAYS_VISIBLE) out[id] = true;
+    return out;
+}
+

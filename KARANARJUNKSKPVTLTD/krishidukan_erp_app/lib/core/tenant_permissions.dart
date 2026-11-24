@@ -29,6 +29,10 @@ class TenantPermissions {
   /// is unrestricted at this layer on the web (the plan still applies).
   bool screen(String role, String screen) {
     if (role == 'admin') return true;
+    // The retailer portal can't be switched off by a saved matrix: an old
+    // `retailer.worklist = false` locked out every invited retailer (Nov 2026).
+    // Mirrors enforceRetailerPortalRole in the web's featurePermissions.ts.
+    if (role == 'retailer' && screen == 'worklist') return true;
     return roleScreens[role]?[screen] ?? _defaultScreen(role, screen);
   }
 
@@ -36,6 +40,16 @@ class TenantPermissions {
   /// TenantSubscription.allowsFeature). Admin bypasses, as on the web.
   bool feature(String role, String id) {
     if (role == 'admin') return true;
+    // A retailer is never granted a worklist action beyond the view tabs, no
+    // matter what was saved (enforceRetailerPortalFeatures on the web). The
+    // view tabs themselves stay admin-controllable.
+    if (role == 'retailer' && id.startsWith('worklist.') && !retailerDefaultFeatures.contains(id)) {
+      return false;
+    }
+    // Their own bills (with the invoice) and payments are the portal itself:
+    // always shown (RETAILER_ALWAYS_VISIBLE on the web). Product Sales stays
+    // admin-controllable.
+    if (role == 'retailer' && retailerAlwaysVisible.contains(id)) return true;
     return roleFeatures[role]?[id] ?? _defaultFeature(role, id);
   }
 
@@ -72,6 +86,14 @@ const retailerDefaultFeatures = {
   'worklist.retailerProfile.b2bOrders.view',
   'worklist.retailerProfile.payments.view',
   'worklist.retailerProfile.productSalesOverview.view',
+};
+
+const retailerAlwaysVisible = {
+  'worklist.invoices.view',
+  'worklist.payments.view',
+  'worklist.retailerProfile.view',
+  'worklist.retailerProfile.b2bOrders.view',
+  'worklist.retailerProfile.payments.view',
 };
 
 bool _defaultFeature(String role, String id) {

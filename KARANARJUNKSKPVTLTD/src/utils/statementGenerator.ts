@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { liveBills, paidAtBilling } from './retailerLedger';
 
 export interface StatementBranding {
     businessName: string;
@@ -18,6 +19,11 @@ export interface StatementSalesOrder {
     createdAt?: { toDate?: () => Date; seconds?: number };
     retailerName?: string;
     invoiceType?: string;
+    status?: string;
+    amountPaid?: number | string;
+    paymentMethod?: string;
+    linkedPaymentIds?: string[];
+    deleted?: boolean;
 }
 
 export interface StatementPayment {
@@ -28,6 +34,9 @@ export interface StatementPayment {
     paymentMethod?: string;
     notes?: string;
     orderNumber?: string;
+    orderId?: string;
+    linkedOrderIds?: string[];
+    deleted?: boolean;
     createdAt?: { toDate?: () => Date; seconds?: number };
 }
 
@@ -94,7 +103,9 @@ export function generateRetailerStatement(opts: StatementOptions): void {
     // Build full transaction list
     const allTx: TxRow[] = [];
 
-    for (const so of salesOrders) {
+    // Same rule as the page's summary (utils/retailerLedger.ts): cancelled
+    // bills are left out, and money paid at billing is a credit.
+    for (const so of liveBills(salesOrders)) {
         const d = resolveDate(so);
         const amount = Number(so.grandTotal ?? so.netAmount ?? so.totalAmount ?? 0);
         if (amount === 0) continue;
@@ -109,7 +120,21 @@ export function generateRetailerStatement(opts: StatementOptions): void {
         });
     }
 
-    for (const p of payments) {
+    for (const { order, amount } of paidAtBilling(salesOrders, payments)) {
+        const so = order as StatementSalesOrder;
+        const d = resolveDate(so);
+        allTx.push({
+            date: d,
+            dateStr: formatDateStr(d),
+            particulars: `Paid at billing${so.paymentMethod ? ` (${so.paymentMethod})` : ''}`,
+            type: 'Payment',
+            refNo: so.orderNumber || so.invoiceNumber || so.id.slice(-8).toUpperCase(),
+            debit: 0,
+            credit: amount,
+        });
+    }
+
+    for (const p of payments.filter((x) => x.deleted !== true)) {
         const d = resolvePaymentDate(p);
         const amount = Number(p.amount ?? 0);
         if (amount === 0) continue;

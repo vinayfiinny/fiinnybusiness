@@ -69,9 +69,21 @@ class PortalBill {
     required this.paymentStatus,
     required this.isGst,
     required this.items,
+    this.paymentMethod = '',
+    this.hasLinkedPayments = false,
   });
 
   final String id;
+
+  /// How a bill paid at the counter was paid (Cash / UPI …), for the statement.
+  final String paymentMethod;
+
+  /// The bill lists linkedPaymentIds: its amountPaid came from payment records.
+  final bool hasLinkedPayments;
+
+  /// Cancelled bills stay in the list but are not owed (retailerLedger.ts).
+  bool get cancelled =>
+      const {'cancelled', 'canceled', 'rejected'}.contains(status.trim().toLowerCase());
 
   /// orderNumber || invoiceNumber || last 8 of the id, upper-cased.
   final String number;
@@ -127,6 +139,8 @@ class PortalBill {
       status: str(d['status']),
       paymentStatus: str(d['paymentStatus']),
       isGst: str(d['invoiceType']) == 'B2B_GST',
+      paymentMethod: str(d['paymentMethod']),
+      hasLinkedPayments: d['linkedPaymentIds'] is List && (d['linkedPaymentIds'] as List).isNotEmpty,
       items: raw is List
           ? [
               for (final e in raw)
@@ -177,9 +191,21 @@ class PortalPayment {
     required this.transactionRef,
     required this.linkedCount,
     required this.unallocated,
+    this.orderIds = const {},
+    this.deleted = false,
+    this.oldUnlinked = false,
   });
 
+  /// A record from before payments were linked to bills (no linkedOrderIds,
+  /// no orderId, no unallocatedAmount): it may be the very money marked on a
+  /// bill, so it covers such bill money first (retailerLedger.ts).
+  final bool oldUnlinked;
+
   final String id;
+
+  /// Bills this payment was applied to (orderId + linkedOrderIds).
+  final Set<String> orderIds;
+  final bool deleted;
 
   /// paymentId, else "#" + last 6 of the id.
   final String reference;
@@ -221,6 +247,16 @@ class PortalPayment {
           ? linked.length
           : (str(d['orderId']).isNotEmpty ? 1 : 0),
       unallocated: dbl(d['unallocatedAmount']),
+      orderIds: {
+        if (str(d['orderId']).isNotEmpty) str(d['orderId']),
+        if (linked is List)
+          for (final x in linked)
+            if (str(x).isNotEmpty) str(x),
+      },
+      deleted: d['deleted'] == true,
+      oldUnlinked: !d.containsKey('linkedOrderIds') &&
+          str(d['orderId']).isEmpty &&
+          !d.containsKey('unallocatedAmount'),
     );
   }
 }
@@ -246,6 +282,14 @@ List<PortalPayment> paymentsInPeriod(
 
 // ── Summary (header cards + Partner Analytics) ───────────────────────────────
 
+/// Money a retailer owes — the SAME rule as the web's utils/retailerLedger.ts
+/// (page summary, Overview and statement), rule for rule:
+///   debit   every live bill (not cancelled; deleted ones never get here)
+///   credit  every payment record (not deleted)
+///   credit  money marked paid on a bill that no payment record covers — a
+///           cash bill settled at the counter has amountPaid but no record.
+/// Nov 2026: adding up payment records only showed 26 master retailers as
+/// owing ₹1.1 lakh they had already paid, and cancelled bills counted.
 class PortalSummary {
   const PortalSummary({
     required this.totalBilled,
@@ -254,14 +298,16 @@ class PortalSummary {
     required this.paidBills,
   });
 
-  /// Σ bill totals (all time) — the web's "Total Sales".
+  /// Σ live bill totals — the web's "Total Sales".
   final double totalBilled;
 
-  /// Σ every payment received, linked or not — "Amount Paid".
+  /// Σ payment records + money paid at billing — "Amount Paid".
   final double totalPaid;
+
+  /// Live bills — "Total Orders".
   final int billCount;
 
-  /// Bills whose stored paymentStatus is 'Paid' — "Paid Orders".
+  /// Live bills fully paid (by amount, or stored 'Paid') — "Paid Orders".
   final int paidBills;
 
   double get outstanding => math.max(0, totalBilled - totalPaid);
@@ -274,14 +320,50 @@ class PortalSummary {
   double get averageBill =>
       billCount > 0 ? (totalBilled / billCount).roundToDouble() : 0;
 
-  static PortalSummary of(
-          List<PortalBill> bills, List<PortalPayment> payments) =>
-      PortalSummary(
-        totalBilled: bills.fold(0.0, (s, b) => s + b.total),
-        totalPaid: payments.fold(0.0, (s, p) => s + p.amount),
-        billCount: bills.length,
-        paidBills: bills.where((b) => b.paymentStatus == 'Paid').length,
-      );
+  static PortalSummary of(List<PortalBill> bills, List<PortalPayment> payments) {
+    final live = liveBills(bills);
+    final received = payments
+        .where((p) => !p.deleted)
+        .fold(0.0, (s, p) => s + p.amount);
+    final atBilling =
+        paidAtBilling(bills, payments).fold(0.0, (s, x) => s + x.$2);
+    return PortalSummary(
+      totalBilled: live.fold(0.0, (s, b) => s + b.total),
+      totalPaid: received + atBilling,
+      billCount: live.length,
+      paidBills: live
+          .where((b) => b.paidByStatus || (b.total > 0 && b.amountPaid >= b.total))
+          .length,
+    );
+  }
+}
+
+/// Bills that count towards what is owed (cancelled ones are left out).
+List<PortalBill> liveBills(List<PortalBill> bills) =>
+    bills.where((b) => !b.cancelled).toList();
+
+/// Live bills with money on the bill itself that no payment record covers,
+/// with that amount (capped at the bill total), oldest bill first — after old
+/// unlinked payment records have covered what they can (retailerLedger.ts).
+List<(PortalBill, double)> paidAtBilling(
+    List<PortalBill> bills, List<PortalPayment> payments) {
+  final live = payments.where((p) => !p.deleted).toList();
+  final covered = <String>{for (final p in live) ...p.orderIds};
+  final candidates = [
+    for (final b in liveBills(bills))
+      if (!b.hasLinkedPayments &&
+          !covered.contains(b.id) &&
+          math.min(math.max(0.0, b.amountPaid), b.total) > 0)
+        (b, math.min(math.max(0.0, b.amountPaid), b.total)),
+  ]..sort((a, b) => a.$1.invoiceDate.compareTo(b.$1.invoiceDate));
+  var pool = live.where((p) => p.oldUnlinked).fold(0.0, (s, p) => s + p.amount);
+  final out = <(PortalBill, double)>[];
+  for (final (b, amount) in candidates) {
+    final used = math.min(pool, amount);
+    pool -= used;
+    if (amount - used > 0) out.add((b, amount - used));
+  }
+  return out;
 }
 
 /// Billed amount per calendar month for the last [months] months (oldest
@@ -397,8 +479,9 @@ class Statement {
   double get closing => opening + totalDebit - totalCredit;
 }
 
-/// generateRetailerStatement(): every bill is a debit, every payment a
-/// credit (zero amounts skipped), oldest first. Rows before [from] fold into
+/// generateRetailerStatement(): every live bill is a debit, every payment a
+/// credit, and money paid at billing a credit too (retailerLedger.ts; zero
+/// amounts skipped), oldest first. Rows before [from] fold into
 /// the opening balance; rows after the end of [to] are left out.
 Statement buildStatement({
   required List<(String, Map<String, dynamic>)> billDocs,
@@ -407,8 +490,26 @@ Statement buildStatement({
   DateTime? to,
 }) {
   final tx = <(DateTime, String, String, String, double, double)>[];
+  final bills = [
+    for (final (id, d) in billDocs)
+      if (d['deleted'] != true) PortalBill.fromDoc(id, d)
+  ];
+  final payments = [
+    for (final (id, d) in paymentDocs) PortalPayment.fromDoc(id, d)
+  ];
+  for (final (b, amount) in paidAtBilling(bills, payments)) {
+    tx.add((
+      b.date ?? DateTime.fromMillisecondsSinceEpoch(0),
+      b.paymentMethod.isEmpty ? 'Paid at billing' : 'Paid at billing (${b.paymentMethod})',
+      'Payment',
+      b.number,
+      0.0,
+      amount,
+    ));
+  }
   for (final (id, d) in billDocs) {
     if (d['deleted'] == true) continue;
+    if (PortalBill.fromDoc(id, d).cancelled) continue;
     final amount = dbl(d['grandTotal'] ?? d['netAmount'] ?? d['totalAmount']);
     if (amount == 0) continue;
     final date = DateTime.tryParse(str(d['invoiceDate'])) ??
@@ -429,6 +530,7 @@ Statement buildStatement({
     ));
   }
   for (final (id, p) in paymentDocs) {
+    if (p['deleted'] == true) continue;
     final amount = dbl(p['amount']);
     if (amount == 0) continue;
     final date = DateTime.tryParse(str(p['paymentDate'])) ??

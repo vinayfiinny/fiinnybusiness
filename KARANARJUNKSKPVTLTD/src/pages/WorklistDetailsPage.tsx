@@ -21,6 +21,7 @@ import DatePeriodFilter from '../components/DatePeriodFilter';
 import { SortLabel, ColumnNumFilter, type NumFilter, EMPTY_NUM, matchNum, isNumActive } from '../components/tableFilters';
 import { type FinancialPeriod, getFinancialDateRange } from '../utils/financialPeriod';
 import { printB2BInvoice } from '../utils/printB2BInvoice';
+import { retailerTotals } from '../utils/retailerLedger';
 import { logAudit } from '../utils/auditLog';
 
 
@@ -1112,15 +1113,13 @@ export default function WorklistDetailsPage() {
     };
     const availablePayments = payments.filter(p => getEffectiveUnallocated(p) > 0);
 
-    // Derived financials
-    // Total Sales = sum of all B2B sales order amounts
-    // Amount Paid = sum of ALL received payments (linked or unlinked)
-    // Outstanding  = Total Sales − Amount Paid
-    const computedTotalSales = salesOrders.reduce((s: number, so: any) =>
-        s + Number(so.grandTotal ?? so.netAmount ?? so.totalAmount ?? 0), 0);
-    const computedTotalPaid = payments.reduce((s: number, p: Payment) =>
-        s + Number(p.amount ?? 0), 0);
-    const computedOutstanding = Math.max(0, computedTotalSales - computedTotalPaid);
+    // Derived financials — one rule for the page, the statement and the app
+    // (utils/retailerLedger.ts): live bills minus payment records minus money
+    // paid at billing that no payment record covers. Cancelled bills don't count.
+    const totals = retailerTotals(salesOrders, payments);
+    const computedTotalSales = totals.totalSales;
+    const computedTotalPaid = totals.totalPaid;
+    const computedOutstanding = totals.outstanding;
 
     // Product Sales aggregation — derived from displaySalesOrders (shared date filter)
     const productSalesData = (() => {
@@ -1630,11 +1629,11 @@ export default function WorklistDetailsPage() {
                         {/* Stats grid (always visible) */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '0.6rem', marginBottom: trendData.length > 0 ? '1.5rem' : 0 }}>
                             {[
-                                { label: 'Total Orders',    value: String(salesOrders.length),                                                                                                          color: 'var(--text-primary)' },
-                                { label: 'Avg Order Value', value: `₹${salesOrders.length > 0 ? Math.round(computedTotalSales / salesOrders.length).toLocaleString() : 0}`,                             color: 'var(--secondary)' },
+                                { label: 'Total Orders',    value: String(totals.billCount),                                                                                                          color: 'var(--text-primary)' },
+                                { label: 'Avg Order Value', value: `₹${totals.billCount > 0 ? Math.round(computedTotalSales / totals.billCount).toLocaleString() : 0}`,                             color: 'var(--secondary)' },
                                 { label: 'Paid Amount',     value: `₹${computedTotalPaid.toLocaleString()}`,                                                                                            color: '#10b981' },
                                 { label: 'Outstanding',     value: `₹${computedOutstanding.toLocaleString()}`,                                                                                          color: computedOutstanding > 0 ? '#ef4444' : 'var(--text-tertiary)' },
-                                { label: 'Paid Orders',     value: String(salesOrders.filter((s: any) => s.paymentStatus === 'Paid').length),                                                           color: '#10b981' },
+                                { label: 'Paid Orders',     value: String(totals.paidBills),                                                           color: '#10b981' },
                             ].map(stat => (
                                 <div key={stat.label} style={{ background: 'var(--surface-raised)', borderRadius: '10px', padding: '0.55rem 0.75rem' }}>
                                     <div style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem' }}>{stat.label}</div>

@@ -263,14 +263,18 @@ void main() {
       expect(p.feature('retailer', 'worklist.partners.call'), isFalse);
       expect(p.feature('retailer', 'reports.view'), isTrue);
     });
-    test('stored values win key by key (production master today)', () {
+    test('stored values win key by key, except the retailer portal baseline', () {
+      // Production master had retailer.worklist = false stored, which locked
+      // out every invited retailer (Nov 2026). The portal screen can no longer
+      // be switched off by a saved matrix; every other key still wins.
       final p = TenantPermissions.fromDocs(
         {'retailer': {'worklist': false}, 'analyst': {'admin': true}},
         {'retailer': {'worklist.retailerProfile.b2bOrders.view': false}},
       );
-      expect(p.screen('retailer', 'worklist'), isFalse);
+      expect(p.screen('retailer', 'worklist'), isTrue);
       expect(p.screen('analyst', 'admin'), isTrue);
-      expect(p.feature('retailer', 'worklist.retailerProfile.b2bOrders.view'), isFalse);
+      // Bills are part of the portal baseline: a stored false can't hide them.
+      expect(p.feature('retailer', 'worklist.retailerProfile.b2bOrders.view'), isTrue);
       // A key the stored map doesn't mention keeps its default.
       expect(p.feature('retailer', 'worklist.retailerProfile.payments.view'), isTrue);
     });
@@ -332,10 +336,17 @@ void main() {
         );
       }
     });
-    test('role matrix switched off → refused (production master today)', () {
+    test('role matrix with worklist off still lets a retailer in (production master, Nov 2026)', () {
+      // The stored retailer.worklist = false that locked every invited retailer
+      // out is overridden by the portal baseline.
       final p = TenantPermissions.fromDocs({'retailer': {'worklist': false}}, null);
-      expect(PortalAccess.resolve(user: retailerUser(), sub: okPlan, subLoaded: true, perms: p).denial,
-          PortalDenial.turnedOff);
+      final a = PortalAccess.resolve(user: retailerUser(), sub: okPlan, subLoaded: true, perms: p);
+      expect(a.allowed, isTrue);
+      expect(a.denial, isNull);
+    });
+    test('the plan and the link can still refuse a retailer', () {
+      expect(PortalAccess.resolve(user: retailerUser(), sub: null, subLoaded: true, perms: defaults).denial,
+          PortalDenial.planExcludes);
     });
     test('defaults: all three tabs', () {
       final a = PortalAccess.resolve(user: retailerUser(), sub: okPlan, subLoaded: true, perms: defaults);
@@ -351,7 +362,8 @@ void main() {
         }
       });
       final a = PortalAccess.resolve(user: retailerUser(), sub: okPlan, subLoaded: true, perms: p);
-      expect([a.bills, a.payments, a.products], [true, false, false]);
+      // Payments can't be switched off for a retailer any more; Products can.
+      expect([a.bills, a.payments, a.products], [true, true, false]);
     });
   });
 

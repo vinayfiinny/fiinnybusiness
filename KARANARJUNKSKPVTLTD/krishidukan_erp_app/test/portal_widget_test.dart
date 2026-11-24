@@ -138,7 +138,7 @@ void main() {
     expect(find.text('Nashik'), findsOneWidget);
   });
 
-  testWidgets('tabs the business switched off are not offered', (tester) async {
+  testWidgets('Bills and Payments cannot be switched off; Products can', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.6;
     addTearDown(tester.view.reset);
@@ -153,13 +153,11 @@ void main() {
 
     expect(_navLabel('Home'), findsOneWidget);
     expect(_navLabel('Account'), findsOneWidget);
-    expect(_navLabel('Bills'), findsNothing);
-    expect(_navLabel('Payments'), findsNothing);
+    // A retailer always gets their own bills (with the invoice) and payments.
+    expect(_navLabel('Bills'), findsOneWidget);
+    expect(_navLabel('Payments'), findsOneWidget);
     expect(_navLabel('Products'), findsNothing);
-    // The summary still shows (the web's cards are not gated either), but
-    // no bill rows.
     expect(find.text('₹300.00'), findsOneWidget);
-    expect(find.text('INV-2'), findsNothing);
   });
 
   testWidgets('menu button opens the portal drawer from every tab', (tester) async {
@@ -195,26 +193,5 @@ void main() {
     }
     // Any RenderFlex overflow fails the test through the framework.
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('retailer access turned off shows the blocked screen', (tester) async {
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        authStateProvider.overrideWith((ref) => Stream.value(null)),
-        appUserProvider.overrideWith((ref) async => _user),
-        portalAccessProvider.overrideWithValue(PortalAccess.resolve(
-          user: _user,
-          sub: _plan,
-          subLoaded: true,
-          perms: TenantPermissions.fromDocs({'retailer': {'worklist': false}}, null),
-        )),
-        portalRetailerDocProvider.overrideWith((ref) => Stream.value(_retailer)),
-      ],
-      child: MaterialApp(
-        home: RetailerPortalGate(blocked: (m) => Scaffold(body: Text(m))),
-      ),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('Supplier Co has turned off retailer access for now. Please contact them.'), findsOneWidget);
   });
 }

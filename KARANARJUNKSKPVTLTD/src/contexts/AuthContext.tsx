@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, onSnapshot, collection } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { DEFAULT_FEATURE_PERMISSIONS, type FeaturePermissions } from '../utils/featurePermissions';
+import { DEFAULT_FEATURE_PERMISSIONS, enforceRetailerPortalFeatures, enforceRetailerPortalRole, type FeaturePermissions } from '../utils/featurePermissions';
 import {
     resolveEntitlements,
     isScreenAllowedByPlan,
@@ -354,6 +354,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                             ...pObj
                                         };
                                     }
+                                    // The retailer portal can't be switched off by a saved matrix.
+                                    mergedPerms.retailer = enforceRetailerPortalRole(mergedPerms.retailer);
                                     setPermissions(mergedPerms as RolePermissions);
                                 } else {
                                     await setDoc(permDocRef, defaultPermissions);
@@ -375,6 +377,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                             ...(pMap as Record<string, boolean>),
                                         };
                                     }
+                                    merged.retailer = enforceRetailerPortalFeatures(merged.retailer);
                                     setFeaturePermissions(merged);
                                 } else {
                                     await setDoc(featPermDocRef, DEFAULT_FEATURE_PERMISSIONS);
