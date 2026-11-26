@@ -37,6 +37,17 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "brand"
+    productFlavors {
+        create("karanarjun") {
+            dimension = "brand"
+        }
+        create("agrimass") {
+            dimension = "brand"
+            applicationId = "com.agrimass.erp"
+        }
+    }
+
     signingConfigs {
         if (keyPropertiesFile.exists()) {
             create("release") {

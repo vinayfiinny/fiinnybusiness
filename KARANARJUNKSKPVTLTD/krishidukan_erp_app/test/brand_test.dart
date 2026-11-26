@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show appFlavor;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:krishidukan_erp/core/brand.dart';
 
-/// The default build is the KaranArjun app; a brand build (the workflow's
-/// `--dart-define-from-file` with `brands/<id>/brand.json`) swaps only name and logo.
+/// Check the default and branded configurations on the shared project.
 void main() {
-  const branded = bool.hasEnvironment('BRAND_NAME');
+  const branded = appFlavor == 'agrimass' || bool.hasEnvironment('BRAND_NAME');
   const agrimassIcon = 'assets/brands/agrimass/app_icon.png';
 
   test('with no brand defined, the app is exactly the KaranArjun app', () {
@@ -31,14 +31,23 @@ void main() {
     expect(launcher, contains('adaptive_icon_foreground: "$agrimassIcon"'));
     expect(File('pubspec.yaml').readAsStringSync(),
         contains('assets/brands/agrimass/'));
-    // The Android app name must come from strings.xml (the brand step edits
-    // it) — a hard-coded label left the Agrimass APK named "KrishiDukan ERP".
+    // The Android app name resolves through each flavor's resources.
     expect(File('android/app/src/main/AndroidManifest.xml').readAsStringSync(),
         contains('android:label="@string/app_name"'));
-    // A flutter_launcher_icons-<x>.yaml file is read as a build flavor and the
-    // icon never reaches the APK.
-    expect(File('flutter_launcher_icons-agrimass.yaml').existsSync(), isFalse);
-    // The default app title / logo are not hardcoded anywhere else.
+    expect(
+        File('android/app/src/agrimass/res/values/strings.xml')
+            .readAsStringSync(),
+        contains('<string name="app_name">Agrimass</string>'));
+    for (final density in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      expect(
+          File('android/app/src/agrimass/res/mipmap-$density/ic_launcher.png')
+              .existsSync(),
+          isTrue);
+      expect(
+          File('android/app/src/agrimass/res/drawable-$density/ic_launcher_foreground.png')
+              .existsSync(),
+          isTrue);
+    }
     expect(File('assets/icons/app_icon.png').existsSync(), isTrue);
   });
 

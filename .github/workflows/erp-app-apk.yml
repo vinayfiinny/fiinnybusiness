@@ -1,11 +1,10 @@
 name: ERP App APK
 
-# Builds a release APK of the KrishiDukan ERP Flutter app
-# (KARANARJUNKSKPVTLTD/krishidukan_erp_app, com.krishidukan.erp).
+# Builds an Android APK for testing or an app bundle for Google Play.
 #
 # Run it by hand: GitHub -> Actions -> "ERP App APK" -> Run workflow.
 # It also runs when the app's code changes on main.
-# Download the APK from the finished run's "Artifacts" section.
+# Download the selected file from the finished run's "Artifacts" section.
 
 on:
   workflow_dispatch:
@@ -17,6 +16,13 @@ on:
         options:
           - karanarjun
           - agrimass
+      artifact:
+        description: "APK for testing or AAB for Google Play"
+        type: choice
+        default: apk
+        options:
+          - apk
+          - aab
   push:
     branches: [ main ]
     paths:
@@ -24,7 +30,7 @@ on:
       - ".github/workflows/erp-app-apk.yml"
 
 concurrency:
-  group: erp-app-apk-${{ github.ref }}
+  group: erp-app-apk-${{ github.ref }}-${{ inputs.brand || 'karanarjun' }}-${{ inputs.artifact || 'apk' }}
   cancel-in-progress: true
 
 jobs:
@@ -33,6 +39,8 @@ jobs:
     env:
       # A push to main always builds the KaranArjun app.
       BRAND: ${{ inputs.brand || 'karanarjun' }}
+      ARTIFACT: ${{ inputs.artifact || 'apk' }}
+      SIGNING_PREFIX: ${{ inputs.brand == 'agrimass' && 'AGRIMASS_' || '' }}
     defaults:
       run:
         working-directory: KARANARJUNKSKPVTLTD/krishidukan_erp_app
@@ -56,19 +64,20 @@ jobs:
           flutter-version: 3.47.9
           cache: true
 
-      # Optional repo secrets (Settings -> Secrets and variables -> Actions):
-      #   ANDROID_KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
-      # With them the APK is signed with your real release key, so users can
-      # update over an earlier install. Without them a throwaway key is
-      # generated: it installs fine, but a later build signed with a different
-      # key cannot update it (the user would have to uninstall first).
+      # Agrimass uses its own upload key. Play bundles require all signing
+      # secrets for the selected brand. Test APKs can use a temporary key.
       - name: Signing key
         env:
-          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+          KS_B64: ${{ secrets[format('{0}ANDROID_KEYSTORE_BASE64', env.SIGNING_PREFIX)] }}
+          KS_PASS: ${{ secrets[format('{0}KEYSTORE_PASSWORD', env.SIGNING_PREFIX)] }}
+          KEY_ALIAS: ${{ secrets[format('{0}KEY_ALIAS', env.SIGNING_PREFIX)] }}
+          KEY_PASS: ${{ secrets[format('{0}KEY_PASSWORD', env.SIGNING_PREFIX)] }}
         run: |
+          umask 077
+          if [ "$ARTIFACT" = aab ] && { [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; }; then
+            echo "::error::Set all upload-key secrets for the selected brand."
+            exit 1
+          fi
           if [ -n "$KS_B64" ]; then
             echo "Using release keystore from secrets"
             echo "$KS_B64" | base64 -d > android/upload.jks
@@ -90,32 +99,22 @@ jobs:
 
       - run: flutter pub get
 
-      # White-label builds: same code, the client's name and icon. The default
-      # (karanarjun) skips this step, so that build is unchanged.
-      - name: Apply brand
-        if: env.BRAND != 'karanarjun'
-        run: |
-          NAME=$(python3 -c "import json;print(json.load(open('brands/$BRAND/brand.json'))['BRAND_NAME'])")
-          echo "Branding the app as: $NAME"
-          sed -i "s|<string name=\"app_name\">.*</string>|<string name=\"app_name\">$NAME</string>|" android/app/src/main/res/values/strings.xml
-          grep app_name android/app/src/main/res/values/strings.xml
-          dart run flutter_launcher_icons -f "brands/$BRAND/launcher_icons.yaml"
-
       - name: Analyze and test
         run: |
           flutter analyze
-          flutter test
+          flutter test --flavor "$BRAND"
 
-      - name: Build APK
+      - name: Build Android release
         run: |
-          if [ "$BRAND" = "karanarjun" ]; then
-            flutter build apk --release
+          if [ "$ARTIFACT" = aab ]; then
+            flutter build appbundle --release --flavor "$BRAND"
           else
-            flutter build apk --release --dart-define-from-file="brands/$BRAND/brand.json"
+            flutter build apk --release --flavor "$BRAND"
           fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BRAND == 'karanarjun' && 'krishidukan-erp-apk' || format('{0}-erp-apk', env.BRAND) }}
-          path: KARANARJUNKSKPVTLTD/krishidukan_erp_app/build/app/outputs/flutter-apk/app-release.apk
+          name: ${{ format('{0}-erp-{1}', env.BRAND == 'karanarjun' && 'krishidukan' || env.BRAND, env.ARTIFACT) }}
+          path: ${{ env.ARTIFACT == 'aab' && format('KARANARJUNKSKPVTLTD/krishidukan_erp_app/build/app/outputs/bundle/{0}Release/app-{0}-release.aab', env.BRAND) || format('KARANARJUNKSKPVTLTD/krishidukan_erp_app/build/app/outputs/flutter-apk/app-{0}-release.apk', env.BRAND) }}
+          if-no-files-found: error
           retention-days: 30

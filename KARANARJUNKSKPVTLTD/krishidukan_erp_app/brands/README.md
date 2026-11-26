@@ -1,29 +1,36 @@
 # White-label builds
 
-The same app, rebranded per client. Server, data and logins are shared; only
-the name and logo change. The default build (no brand) is the KaranArjun ERP
-app, untouched.
+The Android flavors share the Flutter code, Firebase project, and logins.
+Each flavor has its own package name and can be installed on the same device.
+
+| Flavor | Package name | App name |
+| --- | --- | --- |
+| `karanarjun` (default) | `com.krishidukan.erp` | KrishiDukan ERP |
+| `agrimass` | `com.agrimass.erp` | Agrimass |
 
 ## Build one
 
-GitHub -> Actions -> "ERP App APK" -> Run workflow -> choose **brand**.
-The APK downloads from the run's Artifacts, named after the brand.
+In GitHub Actions, run **ERP App APK**, select the brand, and choose `apk`
+for testing or `aab` for Google Play. Play builds require the upload
+keystore and passwords configured as the workflow's signing secrets.
+Agrimass uses `AGRIMASS_ANDROID_KEYSTORE_BASE64`, `AGRIMASS_KEYSTORE_PASSWORD`,
+`AGRIMASS_KEY_ALIAS`, and `AGRIMASS_KEY_PASSWORD`. KaranArjun uses the same
+secret names without the prefix.
 
-Locally (analyze/test only on the shared machine; release builds happen on
-the build machine):
+For a local Agrimass build:
 
-    flutter build apk --release --dart-define-from-file=brands/agrimass/brand.json
+    flutter build apk --release --flavor agrimass
+    flutter build appbundle --release --flavor agrimass
 
-## Add a client
+## Agrimass Firebase registration
 
-1. `assets/brands/<id>/app_icon.png` - square, 1024 px, white background, logo
-   inside the middle ~65% (Android crops the edges of adaptive icons).
-2. `brands/<id>/brand.json` - `BRAND_NAME`, `BRAND_SHORT`, `BRAND_LOGO`.
-3. `brands/<id>/launcher_icons.yaml` - copy the agrimass one, change the path.
-   Do NOT name it `flutter_launcher_icons-<id>.yaml`: the tool then treats it as a
-   build flavor and the icon never reaches the APK.
-4. Add `<id>` to the workflow's `brand` choices, and
-   `assets/brands/<id>/` to the assets in pubspec.yaml.
+Register `com.agrimass.erp` as an Android app in the existing
+`karanarjun-pvt-ltd` Firebase project. Save its downloaded
+`google-services.json` at `android/app/src/agrimass/google-services.json`.
+The default flavor uses `android/app/google-services.json`.
+Add the Agrimass Play app signing certificate's SHA-1 in Firebase before
+testing Google Sign-In from the Play-distributed app.
 
-Not covered (needs a new package id, Firebase app and signing key): a
-separate Play Store listing, or both brands installed on one phone.
+The launcher resources live in `android/app/src/agrimass/res/` and are
+generated from `assets/brands/agrimass/app_icon.png`. The app's sign-in
+screen uses the same source image.
