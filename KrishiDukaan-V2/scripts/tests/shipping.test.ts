@@ -8,6 +8,7 @@ import {
   DEFAULT_CONFIG as C, canCancelAt, courierBlocker, delhiveryStage, nextPickupDate, orderStatusFor, packKg,
   parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shiprocketStage, shouldApply,
   withinReassignCap, shouldSimulate, orderDropPlace, sellerCourierShare, type Quote,
+  delhiveryRejection, shiprocketQuoteProblem,
 } from "../../functions/src/shipping/pure";
 
 // A config that isn't there, or is mistyped, must never mean live or on.
@@ -131,5 +132,17 @@ assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sell
 assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 200), 65);   // courier cheaper: seller pays only the gap
 assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 120), 0);    // customer's part already covers it
 assert.equal(sellerCourierShare({ deliveryCharge: 135, deliveryBreakdown: { sellerPaysCourier: 134 } }, 400), 134);  // dearer: platform pays the excess
+
+// Courier error reasons: the real Delhivery reply (26 Nov) cut the reason off.
+const dlvReply = { success: false, rmk: "An internal Error has occurred, Please get in touch with client.support@delhivery.com",
+  packages: [{ waybill: "", refnum: "X-1", status: "Fail", remarks: ["Consignee pin code is invalid"] }] };
+assert.equal(delhiveryRejection(dlvReply, JSON.stringify(dlvReply)), "Consignee pin code is invalid");
+assert.equal(delhiveryRejection({ rmk: "ClientWarehouse matching query does not exist." }, ""), "ClientWarehouse matching query does not exist.");
+assert.equal(delhiveryRejection(null, "<html> Bad   Gateway </html>"), "<html> Bad Gateway </html>");
+assert.equal(shiprocketQuoteProblem(401, { message: "Token has expired" }, "").kind, "auth");
+assert.equal(shiprocketQuoteProblem(429, { message: "Too many requests" }, "").kind, "retry");
+assert.equal(shiprocketQuoteProblem(502, null, "<html>").kind, "retry");
+assert.equal(shiprocketQuoteProblem(404, { message: "No courier serviceable" }, "").kind, "none");
+assert.equal(shiprocketQuoteProblem(422, { message: "Invalid pickup postcode" }, "").kind, "error");
 
 console.log("shipping: all passed");

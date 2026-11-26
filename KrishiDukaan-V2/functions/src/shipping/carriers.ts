@@ -4,6 +4,7 @@ import { logger } from "firebase-functions/v2";
 import {
   delhiveryStage, nextPickupDate, shiprocketStage, trackingUrlFor,
   type CarrierId, type OrderItemLike, type Place, type Quote, type Stage, itemQty,
+  delhiveryRejection, shiprocketQuoteProblem,
 } from "./pure";
 
 /**
@@ -118,7 +119,9 @@ async function delhiveryBook(b: BookingInput): Promise<Booking> {
     body: `format=json&data=${encodeURIComponent(JSON.stringify(data))}`,
   });
   const pkg = r.body?.packages?.[0];
-  if (!pkg?.waybill) throw new Error(`Delhivery booking: ${r.text.slice(0, 300)}`);
+  // Delhivery's reason sits deep in the reply; the first 300 characters (what
+  // used to be kept) end before it.
+  if (!pkg?.waybill) throw new Error(`Delhivery refused: ${delhiveryRejection(r.body, r.text)}`);
   const awb = String(pkg.waybill);
   let labelUrl: string | null = null;
   try {
@@ -161,9 +164,28 @@ export async function shiprocketWalletBalance(): Promise<number> {
 
 async function shiprocketQuotes(pickupPin: string, dropPin: string, kg: number, value: number): Promise<Quote[]> {
   const url = `${SHIPROCKET}/courier/serviceability/?pickup_postcode=${pickupPin}&delivery_postcode=${dropPin}&weight=${kg}&cod=0&declared_value=${Math.ceil(value)}`;
-  const r = await http(url, { headers: await srHeaders() });
-  const list = r.body?.data?.available_courier_companies;
-  if (!Array.isArray(list)) return [];
+  // A reply that isn't a courier list used to count as "no courier", so an
+  // order silently lost its Shiprocket fallback (26 Nov). Now: a refused token
+  // logs in again, a busy/server error is asked once more, and anything else is
+  // thrown so the reason is recorded on the order.
+  let list: any[] | null = null;
+  for (let attempt = 1; attempt <= 2 && !list; attempt++) {
+    let r: { status: number; body: any; text: string };
+    try {
+      r = await http(url, { headers: await srHeaders() });
+    } catch (e) {
+      if (attempt === 2) throw new Error(`Shiprocket prices unreachable: ${String(e).slice(0, 160)}`);
+      continue;
+    }
+    if (Array.isArray(r.body?.data?.available_courier_companies)) { list = r.body.data.available_courier_companies; break; }
+    const problem = shiprocketQuoteProblem(r.status, r.body, r.text);
+    if (problem.kind === "none") return [];
+    if (attempt === 2) throw new Error(`Shiprocket prices: ${problem.reason}`);
+    if (problem.kind === "auth") await admin.firestore().collection("_serverConfig").doc("shiprocketToken").delete().catch(() => undefined);
+    else if (problem.kind === "retry") await new Promise((res) => setTimeout(res, 1500));
+    else throw new Error(`Shiprocket prices: ${problem.reason}`);
+  }
+  if (!list) return [];
   return list
     .map((c: any): Quote => ({
       carrier: "shiprocket",
@@ -255,7 +277,7 @@ export async function getQuotes(
   const errors: string[] = [];
   results.forEach((r, i) => {
     if (r.status === "fulfilled") quotes.push(...r.value);
-    else errors.push(`${carriers[i]}: ${String(r.reason).slice(0, 160)}`);
+    else errors.push(`${carriers[i]}: ${String(r.reason).slice(0, 300)}`);
   });
   return { quotes, errors };
 }

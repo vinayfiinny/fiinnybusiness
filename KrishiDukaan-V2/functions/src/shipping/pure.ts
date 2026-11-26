@@ -365,3 +365,42 @@ export function nextPickupDate(from: Date): string {
   if (ist.getUTCDay() === 0) ist.setUTCDate(ist.getUTCDate() + 1);
   return ist.toISOString().slice(0, 10);
 }
+
+// ─── Courier error reasons (Nov 2026) ───────────────────────────────────────
+// A failed booking used to be stored as the first 300 characters of the
+// courier's raw reply, which ends before the reason; and a Shiprocket price
+// reply that wasn't a courier list was silently treated as "no courier", so
+// the order lost its fallback with nothing recorded. These read the reason.
+
+/** Why Delhivery's create API refused a shipment, in its own words. */
+export function delhiveryRejection(body: unknown, text: string): string {
+  const b = (body ?? {}) as Record<string, any>;
+  const pkg = Array.isArray(b.packages) ? b.packages[0] ?? {} : {};
+  const remarks = Array.isArray(pkg.remarks) ? pkg.remarks : pkg.remarks ? [pkg.remarks] : [];
+  const parts = [
+    ...remarks.map((r: unknown) => String(r).trim()).filter(Boolean),
+    pkg.status && String(pkg.status) !== "Fail" ? `status ${pkg.status}` : "",
+  ].filter(Boolean);
+  if (parts.length) return parts.join("; ").slice(0, 400);
+  if (b.rmk) return String(b.rmk).slice(0, 400);
+  if (b.error || b.Error) return String(b.error ?? b.Error).slice(0, 400);
+  return (text || "empty reply").replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
+export type ShiprocketQuoteProblem =
+  | { kind: "none" }                     // genuinely no courier for this route
+  | { kind: "auth"; reason: string }     // token refused: log in again
+  | { kind: "retry"; reason: string }    // busy / server error: ask once more
+  | { kind: "error"; reason: string };   // anything else: record it
+
+/** A Shiprocket serviceability reply that carried no courier list. */
+export function shiprocketQuoteProblem(status: number, body: unknown, text: string): ShiprocketQuoteProblem {
+  const b = (body ?? {}) as Record<string, any>;
+  const msg = String(b.message ?? b.error ?? (text || "").slice(0, 200)).replace(/\s+/g, " ").trim();
+  const reason = `HTTP ${status}${msg ? `: ${msg.slice(0, 200)}` : ""}`;
+  if (status === 401 || status === 403 || /token|unauthori[sz]ed|unauthenticated/i.test(msg)) return { kind: "auth", reason };
+  if (status === 429 || status >= 500 || status === 0) return { kind: "retry", reason };
+  if (status === 404 || /not serviceable|no courier|unserviceable/i.test(msg)) return { kind: "none" };
+  if (status === 200 && Array.isArray(b.data?.available_courier_companies)) return { kind: "none" };
+  return { kind: "error", reason };
+}

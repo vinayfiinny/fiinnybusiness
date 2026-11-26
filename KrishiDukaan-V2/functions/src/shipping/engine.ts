@@ -275,7 +275,7 @@ export async function bookForOrder(orderId: string): Promise<void> {
       logger.info("[shipping] booked", { orderId, carrier: quote.carrier, service: quote.service, cost: quote.cost, simulate });
       return;
     } catch (e) {
-      failures.push(`${quote.carrier}/${quote.service}: ${String(e).slice(0, 200)}`);
+      failures.push(`${quote.carrier}/${quote.service}: ${String(e).slice(0, 400)}`);
       logger.warn("[shipping] booking failed, trying next", { orderId, carrier: quote.carrier, e: String(e) });
     }
   }
