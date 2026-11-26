@@ -686,3 +686,23 @@ export function key10(v: unknown): string {
   const digits = raw.replace(/\D/g, "");
   return /^[+\d\s()-]+$/.test(raw) && digits.length >= 10 ? digits.slice(-10) : raw;
 }
+
+/**
+ * An admin retries the courier for an order that had fallen back to the
+ * seller: the seller will not deliver it after all, so their self-delivery
+ * adjustment goes — but only while unpaid. A paid one stays and the retry is
+ * refused, so money already sent is never silently orphaned.
+ */
+export function withoutUnpaidAdjustment(
+  list: readonly SettlementAdjustment[],
+  kind: AdjustmentKind,
+  sellerKey: string,
+): { list: SettlementAdjustment[]; removed: SettlementAdjustment[]; paid: SettlementAdjustment[] } {
+  const who = key10(sellerKey);
+  const mine = (a: SettlementAdjustment) => a.kind === kind && key10(a.sellerKey) === who;
+  return {
+    list: list.filter((a) => !mine(a) || !!a.paidTransferId),
+    removed: list.filter((a) => mine(a) && !a.paidTransferId),
+    paid: list.filter((a) => mine(a) && !!a.paidTransferId),
+  };
+}

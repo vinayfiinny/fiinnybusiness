@@ -13,6 +13,7 @@ import {
   activeCampaign, actualSellerCourierPaise, bookingSplit, courierShareRefund, customerPaidPaise, gatewayFeePaise, gatewayRate,
   grossUpForGateway, planForReassignedSeller, planSettlement, readAdjustments, readPlan, selfDeliveryAdjustment,
   settlementView, splitCourierCost, withAdjustment, type SplitRates,
+  withoutUnpaidAdjustment,
 } from "../../functions/src/payouts/settlement";
 
 const R: SplitRates = { commissionPercent: 2, gatewayFeePercent: 2, gatewayFeeGstPercent: 18, feeBearer: "seller" };
@@ -341,4 +342,18 @@ console.log("settlement: all checks passed");
   assert.equal(m.walletAlertDue(600_000, 5000, 0, now), false);
   assert.equal(m.walletAlertDue(null, 5000, 0, now), false);       // unknown balance: no false alarm
   console.log("settlement admin helpers: all checks passed");
+}
+
+// Admin retry: the seller's self-delivery adjustment goes only while unpaid.
+{
+  const adj = (over: Record<string, unknown>) => ({ id: "x", sellerKey: "8658031942", kind: "self_delivery", netPaise: 18649, at: "t", ...over }) as never;
+  const unpaid = withoutUnpaidAdjustment([adj({}), adj({ id: "y", kind: "booked_refund" })], "self_delivery" as never, "+918658031942");
+  assert.equal(unpaid.removed.length, 1);
+  assert.equal(unpaid.list.length, 1);
+  assert.equal(unpaid.paid.length, 0);
+  const paid = withoutUnpaidAdjustment([adj({ paidTransferId: "trf_1" })], "self_delivery" as never, "8658031942");
+  assert.equal(paid.removed.length, 0);
+  assert.equal(paid.paid.length, 1);
+  assert.equal(paid.list.length, 1);
+  console.log("settlement retry adjustment: passed");
 }

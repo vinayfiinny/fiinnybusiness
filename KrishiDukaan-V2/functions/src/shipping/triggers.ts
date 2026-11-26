@@ -47,6 +47,14 @@ export const shipOrderOnChange = onDocumentUpdated(
 
     if (after.status === "accepted" && before.status !== "accepted") {
       await bookForOrder(orderId);
+    } else if (
+      // Admin → Courier "Retry booking" sets a retry time of now: book at once
+      // rather than wait for the 30-minute sweep. A future retry time (an
+      // automatic retry) is left to the sweep; bookForOrder checks it anyway.
+      after.status === "accepted" && after.shipment?.stage === "booking" && after.shipment?.retryAt &&
+      after.shipment.retryAt !== before.shipment?.retryAt && Date.parse(String(after.shipment.retryAt)) <= Date.now()
+    ) {
+      await bookForOrder(orderId);
     }
 
     // The one thing a seller may ask for (firestore.rules allows only this field).

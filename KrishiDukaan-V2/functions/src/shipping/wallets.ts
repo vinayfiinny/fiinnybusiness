@@ -85,3 +85,32 @@ export const courierWalletWatch = onSchedule(
     await checkCourierWallets();
   },
 );
+
+/**
+ * A courier refused a booking because its prepaid wallet is empty (Delhivery:
+ * "insufficient balance"). Tells the admins straight away — in-app and
+ * WhatsApp — at most once per 6 hours per courier, and records it on the
+ * wallets doc so Admin → Courier shows it. Delhivery has no balance API, so
+ * without this an empty Delhivery wallet went unnoticed for 12 days (Nov 2026).
+ */
+export async function alertWalletEmpty(carrier: string, detail: string, orderId: string): Promise<void> {
+  const ref = WALLETS_DOC();
+  const now = Date.now();
+  const due = await admin.firestore().runTransaction(async (tx) => {
+    const cfg = (await tx.get(ref)).data() ?? {};
+    const last = Number((cfg.emptyAlert ?? {})[carrier]) || 0;
+    tx.set(ref, {
+      emptyAlert: { [carrier]: now - last < 6 * 3600_000 ? last : now },
+      lastRefusal: { [carrier]: { at: new Date(now).toISOString(), orderId, detail: detail.slice(0, 300) } },
+    }, { merge: true });
+    return now - last >= 6 * 3600_000 ? (Array.isArray(cfg.alertPhones) ? cfg.alertPhones.map(String).filter(Boolean) : []) : null;
+  });
+  if (!due) return;
+  const label = carrier === "delhivery" ? "Delhivery" : carrier === "shiprocket" ? "Shiprocket" : carrier;
+  const text = `${label} refused a booking: the wallet balance is too low. Top it up — the order will be retried automatically. (Order ${orderId})`;
+  for (const phone of due) {
+    await notify(phone, "courier_wallet", `${label} wallet empty`, text, { carrier, orderId }).catch(() => undefined);
+    await queueWaNotification(phone, text).catch(() => undefined);
+  }
+  logger.warn("[wallets] courier wallet empty", { carrier, orderId, recipients: due.length });
+}

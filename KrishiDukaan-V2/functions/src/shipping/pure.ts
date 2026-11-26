@@ -404,3 +404,45 @@ export function shiprocketQuoteProblem(status: number, body: unknown, text: stri
   if (status === 200 && Array.isArray(b.data?.available_courier_companies)) return { kind: "none" };
   return { kind: "error", reason };
 }
+
+// ─── Booking retries and empty wallets (Nov 2026) ───────────────────────────
+// Every real Delhivery booking in UAT failed for 12 days with "insufficient
+// balance" and nobody knew: each order was handed to its seller at once, even
+// across states. A failure that can clear by itself (an empty wallet that gets
+// topped up, a timeout, a courier server error) is now retried later, and an
+// empty wallet alerts the admins.
+
+/** A courier refused because the prepaid wallet is empty. */
+export const isWalletEmptyError = (text: unknown): boolean =>
+  /insufficient (wallet )?balance|low (wallet )?balance|wallet balance is (low|insufficient)|recharge (your )?wallet|not enough balance/i
+    .test(String(text ?? ""));
+
+/** Failures worth trying again later; a bad phone or address is not. */
+export function bookingFailureRetryable(failures: readonly string[]): boolean {
+  return failures.some((f) =>
+    isWalletEmptyError(f) ||
+    /timeout|timed out|aborted|ECONNRESET|ECONNREFUSED|ENOTFOUND|fetch failed|unreachable|HTTP (429|5\d\d)|\b50[234]\b|internal server error/i.test(f));
+}
+
+/** Waits between automatic booking attempts: 30 min, 2 h, 6 h, then the seller delivers. */
+export const BOOKING_RETRY_DELAYS_MS = [30 * 60_000, 2 * 3600_000, 6 * 3600_000] as const;
+
+/**
+ * When to try booking again after automatic attempt [round] (1 = the first
+ * booking) failed for a retryable reason, or null when the retries are used up.
+ */
+export function nextBookingRetry(round: number, nowMs: number): string | null {
+  const delay = BOOKING_RETRY_DELAYS_MS[Math.max(0, Math.floor(round) - 1)];
+  return delay === undefined ? null : new Date(nowMs + delay).toISOString();
+}
+
+/**
+ * May a booking be started now? No shipment yet; or a booking whose lock has
+ * gone stale (a crash); or a booking waiting for its retry time.
+ */
+export function bookingDue(s: Record<string, unknown> | undefined | null, nowMs: number, lockStaleMs: number): boolean {
+  if (!s?.stage) return true;
+  if (s.stage !== "booking") return false;
+  if (s.retryAt) return nowMs >= Date.parse(String(s.retryAt));
+  return nowMs - Date.parse(String(s.lockedAt ?? 0)) > lockStaleMs;
+}

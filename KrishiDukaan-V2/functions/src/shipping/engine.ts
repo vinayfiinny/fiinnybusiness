@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { alertWalletEmpty } from "./wallets";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
@@ -13,6 +14,7 @@ import {
   orderDropPlace, parcelKg, parseConfig, rankQuotes, readSellerPlace, sellerCourierShare, shouldApply,
   validPin, withinReassignCap,
   type OrderItemLike, type Quote, type SelfReason, type ShippingConfig, type Stage,
+  bookingDue, bookingFailureRetryable, isWalletEmptyError, nextBookingRetry,
 } from "./pure";
 import { orderSellerKey, recordBooked, recordCancelled, recordSelfDelivery, settlementFor } from "../payouts/settlement-store";
 
@@ -103,10 +105,8 @@ async function claim(orderId: string): Promise<{ order: FirebaseFirestore.Docume
     const o = snap.data();
     if (!o || o.status !== "accepted" || !isPaid(o)) return null;
     const s = (o.shipment ?? {}) as Record<string, any>;
-    if (s.stage) {
-      const stale = s.stage === "booking" && Date.now() - Date.parse(String(s.lockedAt ?? 0)) > LOCK_STALE_MS;
-      if (!stale) return null;
-    }
+    // No shipment; a stale lock; or a scheduled retry whose time has come.
+    if (!bookingDue(s, Date.now(), LOCK_STALE_MS)) return null;
     const attempt = Number(o.shipmentAttempts ?? 0) + 1;
     tx.update(orderRef(orderId), {
       shipmentAttempts: attempt,
@@ -204,8 +204,11 @@ export async function bookForOrder(orderId: string): Promise<void> {
   const { quotes, errors } = await getQuotes(cfg.carriers, pickup!.pincode, drop.pincode, kg, value);
   const ranked = rankQuotes(quotes);
   if (ranked.length === 0) {
-    // Both couriers erroring is not the same as "no service here".
-    return fallBackToSelf(orderId, o, errors.length === cfg.carriers.length ? "booking_failed" : "not_serviceable", [], errors);
+    // Both couriers erroring is not the same as "no service here" — and if the
+    // errors can clear (a courier down for a moment), try again later.
+    const allFailed = errors.length === cfg.carriers.length;
+    if (allFailed && await scheduleRetryIfWorthIt(orderId, o, attempt, [], errors)) return;
+    return fallBackToSelf(orderId, o, allFailed ? "booking_failed" : "not_serviceable", [], errors);
   }
 
   // Real booking only in live mode and, if liveSellers is set, only for those sellers.
@@ -277,9 +280,42 @@ export async function bookForOrder(orderId: string): Promise<void> {
     } catch (e) {
       failures.push(`${quote.carrier}/${quote.service}: ${String(e).slice(0, 400)}`);
       logger.warn("[shipping] booking failed, trying next", { orderId, carrier: quote.carrier, e: String(e) });
+      if (isWalletEmptyError(e)) await alertWalletEmpty(quote.carrier, String(e), orderId).catch(() => undefined);
     }
   }
+  if (await scheduleRetryIfWorthIt(orderId, o, attempt, ranked.slice(0, 8), failures)) return;
   await fallBackToSelf(orderId, o, "booking_failed", ranked.slice(0, 8), failures);
+}
+
+/**
+ * Every courier failed, but for a reason that can clear by itself (an empty
+ * wallet, a timeout, a courier server error): keep the order in "booking" and
+ * try again later (30 min, 2 h, 6 h — the sweep picks it up), instead of
+ * handing a parcel that may be going across the country to the seller.
+ * Rounds count from the last admin retry (order.shipmentRetryFrom).
+ */
+async function scheduleRetryIfWorthIt(
+  orderId: string, o: FirebaseFirestore.DocumentData, attempt: number, quotes: Quote[], failures: string[],
+): Promise<boolean> {
+  if (!bookingFailureRetryable(failures)) return false;
+  const round = attempt - Number(o.shipmentRetryFrom ?? 0);
+  const retryAt = nextBookingRetry(round, Date.now());
+  if (!retryAt) return false;
+  const wallet = failures.some(isWalletEmptyError);
+  const when = new Date(retryAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+  await orderRef(orderId).update({
+    shipment: {
+      mode: "courier", stage: "booking", active: true, lockedAt: nowIso(), retryAt, retryRound: round,
+      sellerKey: key10(o.sellerPhone ?? o.sellerId), quotes, errors: failures,
+      needsAttention: true,
+      attentionNote: wallet
+        ? `A courier wallet is empty — top it up. Booking retries automatically at ${when}.`
+        : `Courier booking failed. Retrying automatically at ${when}.`,
+    },
+    updatedAt: nowIso(),
+  });
+  logger.warn("[shipping] booking retry scheduled", { orderId, round, retryAt, wallet });
+  return true;
 }
 
 async function tellCustomer(orderId: string, o: FirebaseFirestore.DocumentData, url: string, awb: string) {

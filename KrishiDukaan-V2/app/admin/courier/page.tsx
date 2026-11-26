@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw, Truck } from "lucide-react";
 import { auth } from "../../firebase";
 import { DeliveryMoneyPanel } from "./_components/delivery-money-panel";
+import { CourierAttentionPanel } from "./_components/courier-attention-panel";
 
 type Config = {
   enabled: boolean;
@@ -158,6 +159,8 @@ export default function AdminCourierPage() {
           {message.text}
         </p>
       )}
+
+      <CourierAttentionPanel />
 
       <DeliveryMoneyPanel />
     </div>

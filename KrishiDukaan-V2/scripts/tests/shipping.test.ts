@@ -9,6 +9,7 @@ import {
   parcelKg, parseConfig, parseCustomerAddress, rankQuotes, readSellerPlace, shiprocketStage, shouldApply,
   withinReassignCap, shouldSimulate, orderDropPlace, sellerCourierShare, type Quote,
   delhiveryRejection, shiprocketQuoteProblem,
+  isWalletEmptyError, bookingFailureRetryable, nextBookingRetry, bookingDue, BOOKING_RETRY_DELAYS_MS,
 } from "../../functions/src/shipping/pure";
 
 // A config that isn't there, or is mistyped, must never mean live or on.
@@ -144,5 +145,24 @@ assert.equal(shiprocketQuoteProblem(429, { message: "Too many requests" }, "").k
 assert.equal(shiprocketQuoteProblem(502, null, "<html>").kind, "retry");
 assert.equal(shiprocketQuoteProblem(404, { message: "No courier serviceable" }, "").kind, "none");
 assert.equal(shiprocketQuoteProblem(422, { message: "Invalid pickup postcode" }, "").kind, "error");
+
+// Booking retries / empty wallet — the real Delhivery reply of 26 Nov.
+const walletErr = "delhivery/Surface: Error: Delhivery refused: Crashing while saving package due to exception 'Prepaid client manifest charge API failed due to insufficient balance'.";
+assert.equal(isWalletEmptyError(walletErr), true);
+assert.equal(isWalletEmptyError("Consignee pin code is invalid"), false);
+assert.equal(bookingFailureRetryable([walletErr]), true);
+assert.equal(bookingFailureRetryable(["shiprocket: Shiprocket prices: HTTP 503: busy"]), true);
+assert.equal(bookingFailureRetryable(["shiprocket/X: Courier cant be assigned as Mobile no. is not valid"]), false);
+const t0 = Date.parse("2026-11-26T12:00:00Z");
+assert.equal(nextBookingRetry(1, t0), "2026-11-26T12:30:00.000Z");
+assert.equal(nextBookingRetry(3, t0), "2026-11-26T18:00:00.000Z");
+assert.equal(nextBookingRetry(BOOKING_RETRY_DELAYS_MS.length + 1, t0), null);
+assert.equal(bookingDue(undefined, t0, 600_000), true);
+assert.equal(bookingDue({ stage: "booking", retryAt: "2026-11-26T12:30:00Z" }, t0, 600_000), false);
+assert.equal(bookingDue({ stage: "booking", retryAt: "2026-11-26T11:59:00Z" }, t0, 600_000), true);
+assert.equal(bookingDue({ stage: "booking", lockedAt: "2026-11-26T11:55:00Z" }, t0, 600_000), false); // live lock
+assert.equal(bookingDue({ stage: "booking", lockedAt: "2026-11-26T11:40:00Z" }, t0, 600_000), true);  // stale lock
+assert.equal(bookingDue({ stage: "booked" }, t0, 600_000), false);
+assert.equal(bookingDue({ stage: "self" }, t0, 600_000), false);
 
 console.log("shipping: all passed");
