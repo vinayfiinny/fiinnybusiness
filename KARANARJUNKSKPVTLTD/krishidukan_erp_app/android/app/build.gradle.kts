@@ -44,7 +44,7 @@ android {
         }
         create("agrimass") {
             dimension = "brand"
-            applicationId = "com.agrimass.erp"
+            applicationId = "com.Agrimass.erp"
         }
     }
 

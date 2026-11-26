@@ -7,6 +7,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:832154675525:android:a317277cd9bf01de85362c",
+        "android_client_info": {
+          "package_name": "com.Agrimass.erp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "832154675525-4hio310ldeiqm9m4iqavipcgna8m1bli.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA506IGfzmABsAOLUXoNfbX3qsC7iK_B1Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "832154675525-4hio310ldeiqm9m4iqavipcgna8m1bli.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:832154675525:android:a2767be96825074d85362c",
         "android_client_info": {
           "package_name": "com.agrimass.erp"

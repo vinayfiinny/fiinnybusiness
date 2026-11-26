@@ -6,7 +6,7 @@ Each flavor has its own package name and can be installed on the same device.
 | Flavor | Package name | App name |
 | --- | --- | --- |
 | `karanarjun` (default) | `com.krishidukan.erp` | KrishiDukan ERP |
-| `agrimass` | `com.agrimass.erp` | Agrimass |
+| `agrimass` | `com.Agrimass.erp` | Agrimass |
 
 ## Build one
 
@@ -24,7 +24,7 @@ For a local Agrimass build:
 
 ## Agrimass Firebase registration
 
-Register `com.agrimass.erp` as an Android app in the existing
+Register `com.Agrimass.erp` as an Android app in the existing
 `karanarjun-pvt-ltd` Firebase project. Save its downloaded
 `google-services.json` at `android/app/src/agrimass/google-services.json`.
 The default flavor uses `android/app/google-services.json`.
