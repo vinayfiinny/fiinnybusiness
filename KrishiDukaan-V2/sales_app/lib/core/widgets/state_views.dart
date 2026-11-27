@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
@@ -34,9 +35,15 @@ class LoadingView extends StatelessWidget {
 }
 
 class ErrorView extends StatelessWidget {
-  const ErrorView({super.key, required this.message, this.onRetry});
+  const ErrorView({super.key, required this.message, this.onRetry, this.error});
   final String message;
   final VoidCallback? onRetry;
+
+  /// The underlying error. When given, a short reason is shown under the
+  /// message, so a rep can tell us what actually failed instead of a generic
+  /// "check your connection" (a dealer-list failure in Nov 2026 could not be
+  /// diagnosed from the screenshot).
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +76,14 @@ class ErrorView extends StatelessWidget {
                 height: 1.4,
               ),
             ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                loadErrorReason(error!),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: AppColors.error),
+              ),
+            ],
             if (onRetry != null) ...[
               const SizedBox(height: 20),
               SizedBox(
@@ -254,4 +269,24 @@ class StatusChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A short, readable reason for a failed load: Firestore's own code with a
+/// plain explanation for the ones a rep can act on.
+String loadErrorReason(Object e) {
+  if (e is FirebaseException) {
+    final hint = switch (e.code) {
+      'permission-denied' =>
+        'Your account is not allowed to read this. Ask the admin to check your sales role.',
+      'unavailable' => 'No connection to the server right now.',
+      'failed-precondition' =>
+        'The database needs an index for this list. Tell the admin.',
+      'unauthenticated' => 'You are signed out. Sign in again.',
+      'deadline-exceeded' => 'The server took too long to answer.',
+      _ => '',
+    };
+    return hint.isEmpty ? 'Reason: ${e.code}' : '$hint (${e.code})';
+  }
+  final t = e.toString().replaceAll('\n', ' ');
+  return 'Reason: ${t.length > 120 ? '${t.substring(0, 120)}…' : t}';
 }

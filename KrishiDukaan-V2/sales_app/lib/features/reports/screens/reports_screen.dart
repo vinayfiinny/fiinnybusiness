@@ -63,6 +63,7 @@ class ReportsScreen extends ConsumerWidget {
               loading: () =>
                   const LoadingView(message: 'Crunching your numbers…'),
               error: (e, _) => ErrorView(
+                error: e,
                 message:
                     'Could not build your report. '
                     'Check your connection and try again.',

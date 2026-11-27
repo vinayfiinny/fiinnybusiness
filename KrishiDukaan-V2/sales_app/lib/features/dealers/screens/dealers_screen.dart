@@ -127,6 +127,7 @@ class DealersScreen extends ConsumerWidget {
             child: dealersAsync.when(
               loading: () => const LoadingView(message: 'Loading dealers…'),
               error: (e, _) => ErrorView(
+                error: e,
                 message:
                     'Could not load the dealer list. '
                     'Check your connection and try again.',

@@ -58,6 +58,7 @@ class _OfferLinkScreenState extends ConsumerState<OfferLinkScreen> {
       body: async.when(
         loading: () => const LoadingView(message: 'Loading current plans…'),
         error: (e, _) => ErrorView(
+          error: e,
           message: 'Could not load plans.',
           onRetry: () => ref.invalidate(offerPlansProvider),
         ),

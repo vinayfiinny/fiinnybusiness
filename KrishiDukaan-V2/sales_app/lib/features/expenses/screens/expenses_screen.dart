@@ -63,6 +63,7 @@ class ExpensesScreen extends ConsumerWidget {
       body: expensesAsync.when(
         loading: () => const LoadingView(message: 'Loading your claims…'),
         error: (e, _) => ErrorView(
+          error: e,
           message:
               'Could not load your expenses. Check your connection and try again.',
           onRetry: () => ref.invalidate(expensesProvider),

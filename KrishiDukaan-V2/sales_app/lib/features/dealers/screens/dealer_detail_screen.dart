@@ -35,6 +35,7 @@ class DealerDetailScreen extends ConsumerWidget {
       body: dealerAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
+          error: e,
           message: 'Could not load this dealer.',
           onRetry: () => ref.invalidate(dealerByIdProvider(dealerId)),
         ),
@@ -511,6 +512,7 @@ class _NotesSectionState extends ConsumerState<_NotesSection> {
             child: LoadingView(),
           ),
           error: (e, _) => ErrorView(
+            error: e,
             message: 'Could not load notes.',
             onRetry: () => ref.invalidate(dealerNotesProvider(widget.dealerId)),
           ),

@@ -34,6 +34,7 @@ class SessionDetailScreen extends ConsumerWidget {
       body: sessionAsync.when(
         loading: () => const LoadingView(),
         error: (e, _) => ErrorView(
+          error: e,
           message: 'Could not load this session.',
           onRetry: () => ref.invalidate(sessionByIdProvider(sessionId)),
         ),

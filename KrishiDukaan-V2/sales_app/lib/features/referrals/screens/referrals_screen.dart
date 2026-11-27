@@ -31,6 +31,7 @@ class ReferralsScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const LoadingView(message: 'Loading your referrals…'),
         error: (e, _) => ErrorView(
+          error: e,
           message: e.toString().replaceFirst('Exception: ', ''),
           onRetry: () => ref.invalidate(myReferralCodesProvider),
         ),

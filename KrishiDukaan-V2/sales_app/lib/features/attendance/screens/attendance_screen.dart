@@ -168,6 +168,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 child: LoadingView(),
               ),
               error: (e, _) => ErrorView(
+                error: e,
                 message: 'Could not load your attendance record.',
                 onRetry: () =>
                     ref.invalidate(attendanceInRangeProvider(_range)),

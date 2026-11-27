@@ -156,7 +156,8 @@ class DaySessionRepository {
     final out = <LatLngPoint>[session.startGeo];
     for (final it in items) {
       final far =
-          DirectionsService.haversineKm(out.last, it.p) * 1000 >= minSeparationM;
+          DirectionsService.haversineKm(out.last, it.p) * 1000 >=
+          minSeparationM;
       if (it.keep || far) out.add(it.p);
     }
     out.add(endGeo);

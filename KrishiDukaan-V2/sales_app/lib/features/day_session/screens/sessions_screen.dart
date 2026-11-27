@@ -59,6 +59,7 @@ class SessionsScreen extends ConsumerWidget {
       body: sessionsAsync.when(
         loading: () => const LoadingView(message: 'Loading your history…'),
         error: (e, _) => ErrorView(
+          error: e,
           message:
               'Could not load your sessions. Check your connection and try again.',
           onRetry: () => ref.invalidate(sessionHistoryProvider),
