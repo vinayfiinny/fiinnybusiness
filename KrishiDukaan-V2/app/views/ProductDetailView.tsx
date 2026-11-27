@@ -1538,46 +1538,58 @@ export default function ProductDetailView({
             />
           </div>
 
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 md:p-4">
-            <label htmlFor="product-shop-location" className="block text-sm font-bold text-on-surface">
-              {t('productShopLocationTitle')}
-            </label>
-            <p className="mt-0.5 text-xs text-on-surface-variant">{t('productShopLocationHint')}</p>
-            <form onSubmit={searchStoresNear} className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                id="product-shop-location"
-                type="search"
-                value={storeSearchDraft}
-                onChange={(event) => setStoreSearchDraft(event.target.value)}
-                placeholder={t('productShopLocationPlaceholder')}
-                maxLength={80}
-                className="min-w-0 flex-1 rounded-xl border border-outline-variant bg-white px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
-              />
-              <button type="submit" disabled={storeSearchBusy} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
-                {storeSearchBusy ? t('productShopLocationSearching') : t('productShopLocationSearch')}
-              </button>
-            </form>
-            {storeSearchError && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{storeSearchError}</p>}
-            {storeSearchLocation && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                <span className="font-semibold text-primary">{t('productShopLocationNear')} {storeSearchLocation.label}</span>
-                <select
-                  aria-label={t('productShopLocationRadius')}
-                  value={storeSearchRadius}
-                  onChange={(event) => setStoreSearchRadius(Number(event.target.value))}
-                  className="rounded-lg border border-outline-variant bg-white px-2 py-1.5 text-xs text-on-surface"
-                >
-                  <option value={10}>10 km</option>
-                  <option value={25}>25 km</option>
-                  <option value={50}>50 km</option>
-                  <option value={0}>{t('productShopLocationAll')}</option>
-                </select>
-                <button type="button" onClick={() => { setStoreSearchLocation(null); setStoreSearchDraft(''); setStoreSearchError(''); setMobileStoresExpanded(false); }} className="font-bold text-primary underline underline-offset-2">
-                  {t('productShopLocationClear')}
+          <details key={product.id} className="group/location rounded-xl border border-primary/20 bg-white open:border-primary/30">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors hover:bg-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+              <ICONS.Location aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold text-on-surface">{t('productShopLocationTitle')}</span>
+                {storeSearchLocation && (
+                  <span className="block truncate text-xs text-on-surface-variant group-open/location:hidden">
+                    {t('productShopLocationNear')} {storeSearchLocation.label}
+                  </span>
+                )}
+              </span>
+              <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-primary transition-transform motion-reduce:transition-none group-open/location:rotate-180" />
+            </summary>
+            <div className="border-t border-primary/10 px-3 pb-3 pt-2.5">
+              <label htmlFor="product-shop-location" className="sr-only">{t('productShopLocationPlaceholder')}</label>
+              <p className="text-xs text-on-surface-variant">{t('productShopLocationHint')}</p>
+              <form onSubmit={searchStoresNear} className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="product-shop-location"
+                  type="search"
+                  value={storeSearchDraft}
+                  onChange={(event) => setStoreSearchDraft(event.target.value)}
+                  placeholder={t('productShopLocationPlaceholder')}
+                  maxLength={80}
+                  className="min-w-0 flex-1 rounded-xl border border-outline-variant bg-white px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+                />
+                <button type="submit" disabled={storeSearchBusy} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
+                  {storeSearchBusy ? t('productShopLocationSearching') : t('productShopLocationSearch')}
                 </button>
-              </div>
-            )}
-          </div>
+              </form>
+              {storeSearchError && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{storeSearchError}</p>}
+              {storeSearchLocation && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                  <span className="font-semibold text-primary">{t('productShopLocationNear')} {storeSearchLocation.label}</span>
+                  <select
+                    aria-label={t('productShopLocationRadius')}
+                    value={storeSearchRadius}
+                    onChange={(event) => setStoreSearchRadius(Number(event.target.value))}
+                    className="rounded-lg border border-outline-variant bg-white px-2 py-1.5 text-xs text-on-surface"
+                  >
+                    <option value={10}>10 km</option>
+                    <option value={25}>25 km</option>
+                    <option value={50}>50 km</option>
+                    <option value={0}>{t('productShopLocationAll')}</option>
+                  </select>
+                  <button type="button" onClick={() => { setStoreSearchLocation(null); setStoreSearchDraft(''); setStoreSearchError(''); setMobileStoresExpanded(false); }} className="font-bold text-primary underline underline-offset-2">
+                    {t('productShopLocationClear')}
+                  </button>
+                </div>
+              )}
+            </div>
+          </details>
 
           {/* Store list — desktop only gets a capped height with internal scroll so a
               long list (>5–6 stores) doesn't create whitespace beside the image. Mobile
